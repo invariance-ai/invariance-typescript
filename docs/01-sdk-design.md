@@ -70,7 +70,7 @@ await run.finish();
 
 const monitor = await inv.monitors.createSimple({
   name: "Dangerous output",
-  evaluator: { type: "keyword", field: "output", value: "dangerous" },
+  evaluator: { type: "keyword", field: "output", keywords: ["dangerous"] },
   severity: "high",
   review: true,
 });
@@ -120,13 +120,15 @@ MVP monitor body:
 type SimpleMonitorBody = {
   name: string;
   evaluator:
-    | { type: "keyword"; field: string; value: string }
-    | { type: "threshold"; field: string; operator: "gt" | "gte" | "lt" | "lte"; value: number };
+    | { type: "keyword"; field: string; keywords: string[]; case_sensitive?: boolean }
+    | { type: "threshold"; field: string; operator: ">" | ">=" | "<" | "<=" | "==" | "!="; value: number };
   severity?: "low" | "medium" | "high" | "critical";
   review?: boolean;
-  schedule?: { cadence_minutes: number };
+  schedule?: { kind: "manual" } | { kind: "interval"; every_seconds: number };
 };
 ```
+
+SDK `review: true` maps to backend `creates_review: true`.
 
 No `on_completion`, `on_error`, regex, LLM judge, or code monitor in the MVP.
 
@@ -184,4 +186,3 @@ Useful legacy files:
 ```
 
 Port only the ideas and tested ergonomics. Do not copy the legacy module graph wholesale.
-
