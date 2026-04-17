@@ -33,14 +33,14 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     'invariance_create_run',
-    'Start a new Invariance run/session',
+    'Start a new Invariance run',
     { name: z.string().optional().describe('Run name') },
     async ({ name }) => {
       const run = await inv.runs.start({ name });
       return {
         content: [{
           type: 'text' as const,
-          text: JSON.stringify({ id: run.sessionId, name: run.name, status: run.status }),
+          text: JSON.stringify({ id: run.runId, name: run.name, status: run.status }),
         }],
       };
     },
@@ -51,13 +51,13 @@ export function createMcpServer(): McpServer {
   server.tool(
     'invariance_get_run',
     'Get details of an Invariance run',
-    { id: z.string().describe('Run/session ID') },
+    { id: z.string().describe('Run ID') },
     async ({ id }) => {
       const run = await inv.runs.get(id);
       return {
         content: [{
           type: 'text' as const,
-          text: JSON.stringify({ id: run.sessionId, name: run.name, status: run.status }),
+          text: JSON.stringify({ id: run.runId, name: run.name, status: run.status }),
         }],
       };
     },
@@ -86,13 +86,13 @@ export function createMcpServer(): McpServer {
     'invariance_write_node',
     'Write a node to an Invariance run',
     {
-      session_id: z.string().describe('Session/run ID'),
+      run_id: z.string().describe('Run ID'),
       action_type: z.string().describe('Action type (e.g. tool_call, llm_call)'),
       input: z.string().optional().describe('Input JSON string'),
       output: z.string().optional().describe('Output JSON string'),
     },
-    async ({ session_id, action_type, input, output }) => {
-      const nodes = await inv.nodes.write(session_id, [{
+    async ({ run_id, action_type, input, output }) => {
+      const nodes = await inv.nodes.write(run_id, [{
         action_type,
         input: parseJsonArg('input', input),
         output: parseJsonArg('output', output),
@@ -111,9 +111,9 @@ export function createMcpServer(): McpServer {
   server.tool(
     'invariance_list_nodes',
     'List nodes for an Invariance run',
-    { session_id: z.string().describe('Session/run ID') },
-    async ({ session_id }) => {
-      const result = await inv.nodes.list(session_id);
+    { run_id: z.string().describe('Run ID') },
+    async ({ run_id }) => {
+      const result = await inv.nodes.list(run_id);
       return {
         content: [{
           type: 'text' as const,
@@ -128,7 +128,7 @@ export function createMcpServer(): McpServer {
   server.tool(
     'invariance_verify_run',
     'Verify the proof chain for an Invariance run',
-    { id: z.string().describe('Session/run ID') },
+    { id: z.string().describe('Run ID') },
     async ({ id }) => {
       const run = await inv.runs.get(id);
       const proof = await run.verify();
