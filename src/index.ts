@@ -7,18 +7,24 @@ import { AgentsResource } from './resources/agents.js';
 export { InvarianceApiError } from './client.js';
 export { type InvarianceConfig } from './config.js';
 export {
-  Run,
+  RunClient,
   RunsResource,
+  Step,
+  type Run,
   type Session,
   type Node,
+  type RunProof,
+  type RunProofReason,
   type SessionProof,
   type SessionProofReason,
   type ListResponse,
   type StartRunOptions,
+  type StepOptions,
   type WriteNodeOptions,
 } from './resources/runs.js';
 export { NodesResource, type WriteNodeInput } from './resources/nodes.js';
 export { AgentsResource, type Agent, type ApiKeyPublic, type MeResponse } from './resources/agents.js';
+export { trace } from './resources/trace.js';
 export {
   generateKeypair,
   getPublicKey,

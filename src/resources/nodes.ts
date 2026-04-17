@@ -20,17 +20,17 @@ export interface WriteNodeInput {
 export class NodesResource {
   constructor(private readonly http: HttpClient) {}
 
-  async write(sessionId: string, events: WriteNodeInput[]): Promise<Node[]> {
-    const body = events.map((e) => ({ session_id: sessionId, ...e }));
+  async write(runId: string, events: WriteNodeInput[]): Promise<Node[]> {
+    const body = events.map((e) => ({ run_id: runId, ...e }));
     const res = await this.http.post<{ data: Node[] }>('/v1/nodes', body);
     return res.data;
   }
 
   async list(
-    sessionId: string,
+    runId: string,
     opts?: { cursor?: string; limit?: number },
   ): Promise<ListResponse<Node>> {
-    let path = `/v1/sessions/${sessionId}/nodes`;
+    let path = `/v1/runs/${runId}/nodes`;
     const params = new URLSearchParams();
     if (opts?.cursor) params.set('cursor', opts.cursor);
     if (opts?.limit) params.set('limit', String(opts.limit));

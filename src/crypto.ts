@@ -47,7 +47,7 @@ export function sha256Hex(input: string): string {
 
 export interface NodeHashPayload {
   id: string;
-  session_id: string;
+  run_id: string;
   agent_id: string;
   parent_id: string | null;
   action_type: string;
