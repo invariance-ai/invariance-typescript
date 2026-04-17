@@ -1,4 +1,4 @@
-export const DEFAULT_API_URL = 'https://api.invariance.dev';
+export const DEFAULT_API_URL = 'https://api.useinvariance.com';
 
 export interface InvarianceConfig {
   apiKey: string;
