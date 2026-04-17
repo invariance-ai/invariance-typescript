@@ -48,7 +48,7 @@ runs
   .action(async (opts) => {
     const inv = getClient(program.opts());
     const run = await inv.runs.start({ name: opts.name });
-    output({ id: run.sessionId, name: run.name, status: run.status }, program.opts().json);
+    output({ id: run.runId, name: run.name, status: run.status }, program.opts().json);
   });
 
 runs
@@ -66,7 +66,7 @@ runs
   .action(async (id: string) => {
     const inv = getClient(program.opts());
     const run = await inv.runs.get(id);
-    output({ id: run.sessionId, name: run.name, status: run.status }, program.opts().json);
+    output({ id: run.runId, name: run.name, status: run.status }, program.opts().json);
   });
 
 runs
@@ -84,14 +84,14 @@ runs
 const nodes = program.command('nodes').description('Manage nodes');
 
 nodes
-  .command('write <session_id>')
+  .command('write <run_id>')
   .description('Write a node')
   .requiredOption('--action-type <type>', 'Action type')
   .option('--input <json>', 'Input JSON')
   .option('--output <json>', 'Output JSON')
-  .action(async (sessionId: string, opts) => {
+  .action(async (runId: string, opts) => {
     const inv = getClient(program.opts());
-    const result = await inv.nodes.write(sessionId, [{
+    const result = await inv.nodes.write(runId, [{
       action_type: opts.actionType,
       input: parseJsonFlag('input', opts.input),
       output: parseJsonFlag('output', opts.output),
@@ -100,11 +100,11 @@ nodes
   });
 
 nodes
-  .command('list <session_id>')
-  .description('List nodes for a session')
-  .action(async (sessionId: string) => {
+  .command('list <run_id>')
+  .description('List nodes for a run')
+  .action(async (runId: string) => {
     const inv = getClient(program.opts());
-    const result = await inv.nodes.list(sessionId);
+    const result = await inv.nodes.list(runId);
     output(result, program.opts().json);
   });
 

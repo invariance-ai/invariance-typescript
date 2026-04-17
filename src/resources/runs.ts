@@ -15,9 +15,6 @@ export interface Run {
   closed_at: string | null;
 }
 
-/** Legacy alias — Run is the storage entity, kept exported for source compat. */
-export type Session = Run;
-
 export interface Node {
   id: string;
   run_id: string;
@@ -47,9 +44,6 @@ export interface RunProof {
   first_invalid_node_id: string | null;
   reason: RunProofReason | null;
 }
-
-export type SessionProof = RunProof;
-export type SessionProofReason = RunProofReason;
 
 export interface ListResponse<T> {
   data: T[];
@@ -202,11 +196,6 @@ export class RunClient implements RunHandle {
     return this.run.id;
   }
 
-  /** Back-compat alias for callers that still say `session`. */
-  get sessionId(): string {
-    return this.run.id;
-  }
-
   get name(): string {
     return this.run.name;
   }
@@ -312,30 +301,59 @@ export class RunClient implements RunHandle {
 
     if (this.signingKey) {
       const prev = this.lastHash == null ? [] : [this.lastHash];
-      const payload: NodeHashPayload = {
+      const { signature, hash } = this.signNode({
         id: args.id,
-        run_id: this.run.id,
-        agent_id: this.run.agent_id,
         parent_id: args.parent_id,
         action_type: args.action_type,
-        input: args.input ?? null,
-        output: args.output ?? null,
-        error: args.error ?? null,
-        metadata: args.metadata ?? {},
-        custom_fields: args.custom_fields ?? {},
+        input: args.input,
+        output: args.output,
+        error: args.error,
+        metadata: args.metadata,
+        custom_fields: args.custom_fields,
         timestamp: args.timestamp,
         duration_ms: args.duration_ms,
         previous_hashes: prev,
-      };
-      const hash = hashNodePayload(payload);
+      });
       body.timestamp = args.timestamp;
       body.previous_hashes = prev;
-      body.signature = signEd25519(hash, this.signingKey);
+      body.signature = signature;
       this.lastHash = hash;
     } else {
       body.timestamp = args.timestamp;
     }
     return body;
+  }
+
+  private signNode(args: {
+    id: string;
+    parent_id: string | null;
+    action_type: string;
+    input: unknown;
+    output: unknown;
+    error: unknown;
+    metadata: Record<string, unknown> | undefined;
+    custom_fields: Record<string, unknown> | undefined;
+    timestamp: number;
+    duration_ms: number | null;
+    previous_hashes: string[];
+  }): { signature: string; hash: string } {
+    const payload: NodeHashPayload = {
+      id: args.id,
+      run_id: this.run.id,
+      agent_id: this.run.agent_id,
+      parent_id: args.parent_id,
+      action_type: args.action_type,
+      input: args.input ?? null,
+      output: args.output ?? null,
+      error: args.error ?? null,
+      metadata: args.metadata ?? {},
+      custom_fields: args.custom_fields ?? {},
+      timestamp: args.timestamp,
+      duration_ms: args.duration_ms,
+      previous_hashes: args.previous_hashes,
+    };
+    const hash = hashNodePayload(payload);
+    return { signature: signEd25519(hash, this.signingKey!), hash };
   }
 
   async flush(): Promise<void> {
@@ -377,24 +395,21 @@ export class RunClient implements RunHandle {
 
     if (this.signingKey) {
       const id = randomNodeId();
-      const payload: NodeHashPayload = {
+      const { signature } = this.signNode({
         id,
-        run_id: this.run.id,
-        agent_id: this.run.agent_id,
         parent_id: opts.parent_id ?? null,
         action_type: opts.action_type,
-        input: opts.input ?? null,
-        output: opts.output ?? null,
-        error: opts.error ?? null,
-        metadata: opts.metadata ?? {},
-        custom_fields: opts.custom_fields ?? {},
+        input: opts.input,
+        output: opts.output,
+        error: opts.error,
+        metadata: opts.metadata,
+        custom_fields: opts.custom_fields,
         timestamp,
         duration_ms: opts.duration_ms ?? null,
         previous_hashes,
-      };
-      const hash = hashNodePayload(payload);
+      });
       body.id = id;
-      body.signature = signEd25519(hash, this.signingKey);
+      body.signature = signature;
     }
 
     const res = await this.http.post<{ data: Node[] }>('/v1/nodes', body);
