@@ -1,9 +1,10 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { HttpClient } from '../client.js';
 import { hashNodePayload, signEd25519, type NodeHashPayload } from '../crypto.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export interface Session {
+export interface Run {
   id: string;
   agent_id: string;
   name: string;
@@ -14,9 +15,12 @@ export interface Session {
   closed_at: string | null;
 }
 
+/** Legacy alias — Run is the storage entity, kept exported for source compat. */
+export type Session = Run;
+
 export interface Node {
   id: string;
-  session_id: string;
+  run_id: string;
   agent_id: string;
   parent_id: string | null;
   action_type: string;
@@ -33,16 +37,19 @@ export interface Node {
   created_at: string;
 }
 
-export type SessionProofReason = 'linkage' | 'hash' | 'signature' | 'missing_key';
+export type RunProofReason = 'linkage' | 'hash' | 'signature' | 'missing_key';
 
-export interface SessionProof {
-  session_id: string;
+export interface RunProof {
+  run_id: string;
   valid: boolean;
   node_count: number;
   head_hash: string | null;
   first_invalid_node_id: string | null;
-  reason: SessionProofReason | null;
+  reason: RunProofReason | null;
 }
+
+export type SessionProof = RunProof;
+export type SessionProofReason = RunProofReason;
 
 export interface ListResponse<T> {
   data: T[];
@@ -54,6 +61,18 @@ export interface StartRunOptions {
   metadata?: Record<string, unknown>;
   /** Ed25519 private key (32-byte hex). If set, every node written through this run is signed. */
   signingKey?: string;
+  /**
+   * Buffer node writes and flush in batches (max 100 per POST) on
+   * flush/close. Defaults to true. Set false for per-node POSTs.
+   */
+  buffered?: boolean;
+}
+
+export interface StepOptions {
+  input?: unknown;
+  output?: unknown;
+  metadata?: Record<string, unknown>;
+  custom_fields?: Record<string, unknown>;
 }
 
 export interface WriteNodeOptions {
@@ -70,8 +89,9 @@ export interface WriteNodeOptions {
   previous_hashes?: string[];
 }
 
+const BATCH_MAX = 100;
+
 function randomNodeId(): string {
-  // 16 random hex chars is plenty for client-side uniqueness within a session.
   const bytes = new Uint8Array(8);
   (globalThis.crypto ?? require('node:crypto').webcrypto).getRandomValues(bytes);
   let hex = '';
@@ -79,54 +99,288 @@ function randomNodeId(): string {
   return `node_${hex}`;
 }
 
-// ── Run (wraps a session) ──────────────────────────────────────────────────
+/** Per-async-context: the currently-active Step, used to auto-fill parent_id. */
+const currentStep = new AsyncLocalStorage<Step>();
 
-export class Run {
+// ── Step ───────────────────────────────────────────────────────────────────
+
+/**
+ * One unit of work inside a Run. Mutate ``output``/``error``/``metadata``
+ * during the step's body; on close the step emits a node carrying those
+ * values plus ``parent_id`` (inherited from any enclosing step) and
+ * elapsed ``duration_ms``.
+ */
+export class Step {
+  readonly id = randomNodeId();
+  input: unknown;
+  output: unknown;
+  error: unknown;
+  metadata: Record<string, unknown> | undefined;
+  custom_fields: Record<string, unknown> | undefined;
+  private readonly startMs = Date.now();
+  private closed = false;
+
+  constructor(
+    private readonly run: RunHandle,
+    readonly action_type: string,
+    opts: StepOptions,
+    readonly parent_id: string | null,
+  ) {
+    this.input = opts.input;
+    this.output = opts.output;
+    this.metadata = opts.metadata;
+    this.custom_fields = opts.custom_fields;
+  }
+
+  /** Emit the node. Safe to call once. */
+  async close(error?: unknown): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+    if (error !== undefined && this.error === undefined) this.error = error;
+    await this.run._emit({
+      id: this.id,
+      action_type: this.action_type,
+      input: this.input,
+      output: this.output,
+      error: this.error,
+      metadata: this.metadata,
+      custom_fields: this.custom_fields,
+      parent_id: this.parent_id,
+      timestamp: this.startMs,
+      duration_ms: Date.now() - this.startMs,
+    });
+  }
+}
+
+/** Minimal interface Step needs from a Run — lets us share Step with future AsyncLocalStorage variants. */
+interface RunHandle {
+  _emit(args: {
+    id: string;
+    action_type: string;
+    input: unknown;
+    output: unknown;
+    error: unknown;
+    metadata: Record<string, unknown> | undefined;
+    custom_fields: Record<string, unknown> | undefined;
+    parent_id: string | null;
+    timestamp: number;
+    duration_ms: number;
+  }): Promise<void>;
+}
+
+// ── Run ────────────────────────────────────────────────────────────────────
+
+/**
+ * A developer-facing agent run.
+ *
+ * Prefer the callback form for guaranteed cleanup:
+ *
+ *   await inv.runs.start({ name: "x" }, async (run) => {
+ *     await run.step("plan", {}, async (s) => { s.output = ...; });
+ *   });
+ *
+ * On callback completion the run is marked ``completed``; on throw it is
+ * marked ``failed``. Node writes are buffered (max 100 per POST) and
+ * flushed on close or when the buffer fills.
+ */
+export class RunClient implements RunHandle {
   private lastHash: string | null = null;
+  private buffer: WriteBody[] = [];
+  private closed = false;
+  /** Promise chain that serializes writes. The backend cannot detect branched
+   * chains, so two concurrent `_emit`s within one run must not run both. */
+  private writeChain: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly http: HttpClient,
-    private readonly session: Session,
-    private readonly signingKey?: string,
+    private readonly run: Run,
+    private readonly signingKey: string | undefined,
+    private readonly buffered: boolean,
   ) {}
 
+  get runId(): string {
+    return this.run.id;
+  }
+
+  /** Back-compat alias for callers that still say `session`. */
   get sessionId(): string {
-    return this.session.id;
+    return this.run.id;
   }
 
   get name(): string {
-    return this.session.name;
+    return this.run.name;
   }
 
   get status(): string {
-    return this.session.status;
+    return this.run.status;
   }
 
+  // ── step ─────────────────────────────────────────────────────────
+
+  /**
+   * Run ``fn`` within a Step that is auto-emitted on completion.
+   * Nested calls inherit ``parent_id`` via AsyncLocalStorage.
+   */
+  async step<T>(
+    action_type: string,
+    opts: StepOptions,
+    fn: (step: Step) => Promise<T>,
+  ): Promise<T> {
+    const parent = currentStep.getStore();
+    const step = new Step(this, action_type, opts, parent?.id ?? null);
+    try {
+      return await currentStep.run(step, () => fn(step));
+    } catch (err) {
+      await step.close(this.serializeError(err));
+      throw err;
+    } finally {
+      if (!(step as unknown as { closed?: boolean }).closed) {
+        await step.close();
+      }
+    }
+  }
+
+  private serializeError(err: unknown): Record<string, unknown> {
+    if (err instanceof Error) {
+      return { type: err.name, message: err.message, stack: err.stack };
+    }
+    return { type: 'Unknown', message: String(err) };
+  }
+
+  // ── Low-level node emit (used by Step) ───────────────────────────
+
+  async _emit(args: {
+    id: string;
+    action_type: string;
+    input: unknown;
+    output: unknown;
+    error: unknown;
+    metadata: Record<string, unknown> | undefined;
+    custom_fields: Record<string, unknown> | undefined;
+    parent_id: string | null;
+    timestamp: number;
+    duration_ms: number;
+  }): Promise<void> {
+    const run = this.writeChain.then(() => this.doEmit(args));
+    this.writeChain = run.catch(() => undefined);
+    await run;
+  }
+
+  private async doEmit(args: {
+    id: string;
+    action_type: string;
+    input: unknown;
+    output: unknown;
+    error: unknown;
+    metadata: Record<string, unknown> | undefined;
+    custom_fields: Record<string, unknown> | undefined;
+    parent_id: string | null;
+    timestamp: number;
+    duration_ms: number;
+  }): Promise<void> {
+    const body = this.buildBody(args);
+    this.buffer.push(body);
+    if (!this.buffered || this.buffer.length >= BATCH_MAX) {
+      await this.flushLocked();
+    }
+  }
+
+  private buildBody(args: {
+    id: string;
+    action_type: string;
+    input: unknown;
+    output: unknown;
+    error: unknown;
+    metadata: Record<string, unknown> | undefined;
+    custom_fields: Record<string, unknown> | undefined;
+    parent_id: string | null;
+    timestamp: number;
+    duration_ms: number;
+  }): WriteBody {
+    const body: WriteBody = {
+      run_id: this.run.id,
+      id: args.id,
+      action_type: args.action_type,
+    };
+    if (args.input !== undefined) body.input = args.input;
+    if (args.output !== undefined) body.output = args.output;
+    if (args.error !== undefined) body.error = args.error;
+    if (args.metadata !== undefined) body.metadata = args.metadata;
+    if (args.custom_fields !== undefined) body.custom_fields = args.custom_fields;
+    if (args.parent_id !== null) body.parent_id = args.parent_id;
+    body.duration_ms = args.duration_ms;
+
+    if (this.signingKey) {
+      const prev = this.lastHash == null ? [] : [this.lastHash];
+      const payload: NodeHashPayload = {
+        id: args.id,
+        run_id: this.run.id,
+        agent_id: this.run.agent_id,
+        parent_id: args.parent_id,
+        action_type: args.action_type,
+        input: args.input ?? null,
+        output: args.output ?? null,
+        error: args.error ?? null,
+        metadata: args.metadata ?? {},
+        custom_fields: args.custom_fields ?? {},
+        timestamp: args.timestamp,
+        duration_ms: args.duration_ms,
+        previous_hashes: prev,
+      };
+      const hash = hashNodePayload(payload);
+      body.timestamp = args.timestamp;
+      body.previous_hashes = prev;
+      body.signature = signEd25519(hash, this.signingKey);
+      this.lastHash = hash;
+    } else {
+      body.timestamp = args.timestamp;
+    }
+    return body;
+  }
+
+  async flush(): Promise<void> {
+    await this.writeChain.catch(() => undefined);
+    await this.flushLocked();
+  }
+
+  private async flushLocked(): Promise<void> {
+    while (this.buffer.length) {
+      const chunk = this.buffer.splice(0, BATCH_MAX);
+      const res = await this.http.post<{ data: Node[] }>('/v1/nodes', chunk);
+      const nodes = res.data;
+      if (nodes.length && !this.signingKey) {
+        this.lastHash = nodes[nodes.length - 1].hash;
+      }
+    }
+  }
+
+  // ── Low-level escape hatch ──────────────────────────────────────
+
   async node(opts: WriteNodeOptions): Promise<Node> {
+    // Flush buffer first so ordering is preserved.
+    await this.flush();
+    const timestamp = opts.timestamp ?? Date.now();
+    const previous_hashes = opts.previous_hashes ?? (this.lastHash == null ? [] : [this.lastHash]);
     const body: Record<string, unknown> = {
-      session_id: this.session.id,
+      run_id: this.run.id,
       action_type: opts.action_type,
       input: opts.input,
       output: opts.output,
       error: opts.error,
       metadata: opts.metadata,
       custom_fields: opts.custom_fields,
-      timestamp: opts.timestamp,
       duration_ms: opts.duration_ms,
       parent_id: opts.parent_id,
-      previous_hashes: opts.previous_hashes,
+      timestamp,
+      previous_hashes,
     };
 
     if (this.signingKey) {
       const id = randomNodeId();
-      const timestamp = opts.timestamp ?? Date.now();
-      const previousHashes =
-        opts.previous_hashes ?? (this.lastHash == null ? [] : [this.lastHash]);
-
       const payload: NodeHashPayload = {
         id,
-        session_id: this.session.id,
-        agent_id: this.session.agent_id,
+        run_id: this.run.id,
+        agent_id: this.run.agent_id,
         parent_id: opts.parent_id ?? null,
         action_type: opts.action_type,
         input: opts.input ?? null,
@@ -136,15 +390,11 @@ export class Run {
         custom_fields: opts.custom_fields ?? {},
         timestamp,
         duration_ms: opts.duration_ms ?? null,
-        previous_hashes: previousHashes,
+        previous_hashes,
       };
       const hash = hashNodePayload(payload);
-      const signature = signEd25519(hash, this.signingKey);
-
       body.id = id;
-      body.timestamp = timestamp;
-      body.previous_hashes = previousHashes;
-      body.signature = signature;
+      body.signature = signEd25519(hash, this.signingKey);
     }
 
     const res = await this.http.post<{ data: Node[] }>('/v1/nodes', body);
@@ -153,26 +403,36 @@ export class Run {
     return node;
   }
 
-  async verify(): Promise<SessionProof> {
-    return this.http.get<SessionProof>(`/v1/sessions/${this.session.id}/verify`);
+  // ── Lifecycle ───────────────────────────────────────────────────
+
+  async verify(): Promise<RunProof> {
+    return this.http.get<RunProof>(`/v1/runs/${this.run.id}/verify`);
   }
 
-  async finish(): Promise<Session> {
-    const res = await this.http.patch<{ session: Session }>(
-      `/v1/sessions/${this.session.id}`,
+  async finish(): Promise<Run> {
+    await this.flush();
+    if (this.closed) return this.run;
+    this.closed = true;
+    const res = await this.http.patch<{ run: Run }>(
+      `/v1/runs/${this.run.id}`,
       { status: 'completed' },
     );
-    return res.session;
+    return res.run;
   }
 
-  async fail(error?: string): Promise<Session> {
-    const res = await this.http.patch<{ session: Session }>(
-      `/v1/sessions/${this.session.id}`,
+  async fail(error?: string): Promise<Run> {
+    await this.flush().catch(() => undefined);
+    if (this.closed) return this.run;
+    this.closed = true;
+    const res = await this.http.patch<{ run: Run }>(
+      `/v1/runs/${this.run.id}`,
       { status: 'failed', metadata: error ? { error } : undefined },
     );
-    return res.session;
+    return res.run;
   }
 }
+
+type WriteBody = Record<string, unknown>;
 
 // ── Runs resource ──────────────────────────────────────────────────────────
 
@@ -182,26 +442,50 @@ export class RunsResource {
     private readonly defaultSigningKey?: string,
   ) {}
 
-  async start(opts: StartRunOptions = {}): Promise<Run> {
-    const res = await this.http.post<{ session: Session }>('/v1/sessions', {
+  /** Overload: callback form auto-finishes the run on completion (failing on throw). */
+  async start<T>(
+    opts: StartRunOptions,
+    fn: (run: RunClient) => Promise<T>,
+  ): Promise<T>;
+  /** Overload: bare form returns a RunClient the caller must finish/fail. */
+  async start(opts?: StartRunOptions): Promise<RunClient>;
+  async start<T>(
+    opts: StartRunOptions = {},
+    fn?: (run: RunClient) => Promise<T>,
+  ): Promise<T | RunClient> {
+    const res = await this.http.post<{ run: Run }>('/v1/runs', {
       name: opts.name,
       metadata: opts.metadata,
     });
-    return new Run(this.http, res.session, opts.signingKey ?? this.defaultSigningKey);
+    const client = new RunClient(
+      this.http,
+      res.run,
+      opts.signingKey ?? this.defaultSigningKey,
+      opts.buffered ?? true,
+    );
+    if (!fn) return client;
+    try {
+      const result = await fn(client);
+      await client.finish();
+      return result;
+    } catch (err) {
+      await client.fail(err instanceof Error ? err.message : String(err));
+      throw err;
+    }
   }
 
-  async list(opts?: { cursor?: string; limit?: number }): Promise<ListResponse<Session>> {
-    let path = '/v1/sessions';
+  async list(opts?: { cursor?: string; limit?: number }): Promise<ListResponse<Run>> {
+    let path = '/v1/runs';
     const params = new URLSearchParams();
     if (opts?.cursor) params.set('cursor', opts.cursor);
     if (opts?.limit) params.set('limit', String(opts.limit));
     const qs = params.toString();
     if (qs) path += `?${qs}`;
-    return this.http.get<ListResponse<Session>>(path);
+    return this.http.get<ListResponse<Run>>(path);
   }
 
-  async get(id: string): Promise<Run> {
-    const res = await this.http.get<{ session: Session }>(`/v1/sessions/${id}`);
-    return new Run(this.http, res.session, this.defaultSigningKey);
+  async get(id: string): Promise<RunClient> {
+    const res = await this.http.get<{ run: Run }>(`/v1/runs/${id}`);
+    return new RunClient(this.http, res.run, this.defaultSigningKey, true);
   }
 }

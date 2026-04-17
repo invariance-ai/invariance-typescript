@@ -23,7 +23,7 @@ describe('hashNodePayload', () => {
   it('is key-order invariant', () => {
     const payload = {
       id: 'node_1',
-      session_id: 's',
+      run_id: 'r',
       agent_id: 'a',
       parent_id: null,
       action_type: 't',
