@@ -18,9 +18,7 @@ function stubbedInvariance(): { inv: Invariance; calls: Call[] } {
   const inv = Invariance.init({ apiKey: 'inv_test_abc', apiUrl: 'http://test.local' });
 
   // Reach into the private HttpClient and override its methods.
-  const http = (inv as unknown as { http: HttpClient; runs: { http: HttpClient } }).runs[
-    'http' as keyof Invariance['runs']
-  ] as HttpClient;
+  const http = (inv as unknown as { runs: { http: HttpClient } }).runs.http;
 
   const record = async (method: string, path: string, body?: unknown): Promise<unknown> => {
     calls.push({ method, path, body });

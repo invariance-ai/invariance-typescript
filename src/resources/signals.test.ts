@@ -109,14 +109,14 @@ describe('signal types', () => {
     expect(body.data).toEqual({ reason: 'y' });
   });
 
-  it('action.emitSignal(type=...) threads signal_type into compiled definition', () => {
-    const def = compileMonitor({
+  it('action.emitSignal(type=...) threads signal_type into compiled request', () => {
+    const body = compileMonitor({
       name: 'x',
       on: on.node({ action_type: 'tool.use' }),
       when: rule.fieldContains('output', 'danger'),
       do: action.emitSignal({ severity: 'high', title: 'D', type: 'dangerous' }),
     });
-    expect((def.actions?.[0] as Record<string, unknown>).signal_type).toBe('dangerous');
-    expect(def.signal.type).toBe('dangerous');
+    expect(body.signal_type).toBe('dangerous');
+    expect(body.severity).toBe('high');
   });
 });
