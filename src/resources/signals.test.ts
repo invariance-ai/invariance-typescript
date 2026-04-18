@@ -82,9 +82,16 @@ describe('signal types', () => {
       type: 'dangerous',
       severity: 'high',
       title: 'Dangerous',
-      message: undefined,
       data: { reason: 'x' },
     });
+  });
+
+  it('signals.resolve patches /resolve endpoint', async () => {
+    const { inv, calls } = stubbedInvariance();
+    await inv.signals.resolve('signal_9');
+    const call = calls.find((c) => c.path === '/v1/signals/signal_9/resolve');
+    expect(call).toBeDefined();
+    expect(call!.method).toBe('PATCH');
   });
 
   it('run.signal attaches to last node id', async () => {
