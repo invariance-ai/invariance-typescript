@@ -3,6 +3,8 @@ import type { Node, ListResponse } from './runs.js';
 
 export interface WriteNodeInput {
   action_type: string;
+  /** Declared custom node type (see defineNodeType). Monitors can select on this. */
+  type?: string;
   input?: unknown;
   output?: unknown;
   error?: unknown;

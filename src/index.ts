@@ -3,6 +3,7 @@ import { resolveConfig, type InvarianceConfig } from './config.js';
 import { RunsResource } from './resources/runs.js';
 import { NodesResource } from './resources/nodes.js';
 import { AgentsResource } from './resources/agents.js';
+import { MonitorsResource } from './resources/monitors.js';
 
 export { InvarianceApiError } from './client.js';
 export { type InvarianceConfig } from './config.js';
@@ -21,6 +22,24 @@ export {
 } from './resources/runs.js';
 export { NodesResource, type WriteNodeInput } from './resources/nodes.js';
 export { AgentsResource, type Agent, type ApiKeyPublic, type MeResponse } from './resources/agents.js';
+export { defineNodeType, type NodeType } from './resources/node-types.js';
+export {
+  MonitorsResource,
+  compileMonitor,
+  on,
+  rule,
+  evaluator,
+  action,
+  type Monitor,
+  type MonitorSpec,
+  type MonitorListOptions,
+  type On,
+  type Rule,
+  type Evaluator,
+  type When,
+  type Action,
+  type Severity,
+} from './resources/monitors.js';
 export { trace } from './resources/trace.js';
 export {
   generateKeypair,
@@ -38,11 +57,13 @@ export class Invariance {
   readonly runs: RunsResource;
   readonly nodes: NodesResource;
   readonly agents: AgentsResource;
+  readonly monitors: MonitorsResource;
 
   private constructor(private readonly http: HttpClient, signingKey: string | null) {
     this.runs = new RunsResource(http, signingKey ?? undefined);
     this.nodes = new NodesResource(http);
     this.agents = new AgentsResource(http);
+    this.monitors = new MonitorsResource(http);
   }
 
   static init(config: InvarianceConfig): Invariance {

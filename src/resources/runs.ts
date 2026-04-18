@@ -21,6 +21,7 @@ export interface Node {
   agent_id: string;
   parent_id: string | null;
   action_type: string;
+  type: string | null;
   input: unknown;
   output: unknown;
   error: unknown;
@@ -67,10 +68,14 @@ export interface StepOptions {
   output?: unknown;
   metadata?: Record<string, unknown>;
   custom_fields?: Record<string, unknown>;
+  /** Declared custom node type (see defineNodeType). */
+  type?: string;
 }
 
 export interface WriteNodeOptions {
   action_type: string;
+  /** Declared custom node type (see defineNodeType). */
+  type?: string;
   input?: unknown;
   output?: unknown;
   error?: unknown;
@@ -111,6 +116,7 @@ export class Step {
   error: unknown;
   metadata: Record<string, unknown> | undefined;
   custom_fields: Record<string, unknown> | undefined;
+  type: string | undefined;
   private readonly startMs = Date.now();
   private closed = false;
 
@@ -124,6 +130,7 @@ export class Step {
     this.output = opts.output;
     this.metadata = opts.metadata;
     this.custom_fields = opts.custom_fields;
+    this.type = opts.type;
   }
 
   /** Emit the node. Safe to call once. */
@@ -134,6 +141,7 @@ export class Step {
     await this.run._emit({
       id: this.id,
       action_type: this.action_type,
+      type: this.type,
       input: this.input,
       output: this.output,
       error: this.error,
@@ -151,6 +159,7 @@ interface RunHandle {
   _emit(args: {
     id: string;
     action_type: string;
+    type: string | undefined;
     input: unknown;
     output: unknown;
     error: unknown;
@@ -241,6 +250,7 @@ export class RunClient implements RunHandle {
   async _emit(args: {
     id: string;
     action_type: string;
+    type: string | undefined;
     input: unknown;
     output: unknown;
     error: unknown;
@@ -258,6 +268,7 @@ export class RunClient implements RunHandle {
   private async doEmit(args: {
     id: string;
     action_type: string;
+    type: string | undefined;
     input: unknown;
     output: unknown;
     error: unknown;
@@ -277,6 +288,7 @@ export class RunClient implements RunHandle {
   private buildBody(args: {
     id: string;
     action_type: string;
+    type: string | undefined;
     input: unknown;
     output: unknown;
     error: unknown;
@@ -291,6 +303,7 @@ export class RunClient implements RunHandle {
       id: args.id,
       action_type: args.action_type,
     };
+    if (args.type !== undefined) body.type = args.type;
     if (args.input !== undefined) body.input = args.input;
     if (args.output !== undefined) body.output = args.output;
     if (args.error !== undefined) body.error = args.error;
@@ -382,6 +395,7 @@ export class RunClient implements RunHandle {
     const body: Record<string, unknown> = {
       run_id: this.run.id,
       action_type: opts.action_type,
+      type: opts.type,
       input: opts.input,
       output: opts.output,
       error: opts.error,
