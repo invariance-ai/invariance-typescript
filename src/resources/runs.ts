@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { HttpClient } from '../client.js';
 import { hashNodePayload, signEd25519, type NodeHashPayload } from '../crypto.js';
+import { SignalsResource, type EmitSignalInput, type Signal } from './signals.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,7 @@ export interface Node {
   agent_id: string;
   parent_id: string | null;
   action_type: string;
+  type: string | null;
   input: unknown;
   output: unknown;
   error: unknown;
@@ -67,10 +69,14 @@ export interface StepOptions {
   output?: unknown;
   metadata?: Record<string, unknown>;
   custom_fields?: Record<string, unknown>;
+  /** Declared custom node type (see defineNodeType). */
+  type?: string;
 }
 
 export interface WriteNodeOptions {
   action_type: string;
+  /** Declared custom node type (see defineNodeType). */
+  type?: string;
   input?: unknown;
   output?: unknown;
   error?: unknown;
@@ -111,6 +117,7 @@ export class Step {
   error: unknown;
   metadata: Record<string, unknown> | undefined;
   custom_fields: Record<string, unknown> | undefined;
+  type: string | undefined;
   private readonly startMs = Date.now();
   private closed = false;
 
@@ -124,6 +131,7 @@ export class Step {
     this.output = opts.output;
     this.metadata = opts.metadata;
     this.custom_fields = opts.custom_fields;
+    this.type = opts.type;
   }
 
   /** Emit the node. Safe to call once. */
@@ -134,6 +142,7 @@ export class Step {
     await this.run._emit({
       id: this.id,
       action_type: this.action_type,
+      type: this.type,
       input: this.input,
       output: this.output,
       error: this.error,
@@ -151,6 +160,7 @@ interface RunHandle {
   _emit(args: {
     id: string;
     action_type: string;
+    type: string | undefined;
     input: unknown;
     output: unknown;
     error: unknown;
@@ -179,18 +189,22 @@ interface RunHandle {
  */
 export class RunClient implements RunHandle {
   private lastHash: string | null = null;
+  private lastNodeId: string | null = null;
   private buffer: WriteBody[] = [];
   private closed = false;
   /** Promise chain that serializes writes. The backend cannot detect branched
    * chains, so two concurrent `_emit`s within one run must not run both. */
   private writeChain: Promise<unknown> = Promise.resolve();
+  private readonly signals: SignalsResource;
 
   constructor(
     private readonly http: HttpClient,
     private readonly run: Run,
     private readonly signingKey: string | undefined,
     private readonly buffered: boolean,
-  ) {}
+  ) {
+    this.signals = new SignalsResource(http);
+  }
 
   get runId(): string {
     return this.run.id;
@@ -241,6 +255,7 @@ export class RunClient implements RunHandle {
   async _emit(args: {
     id: string;
     action_type: string;
+    type: string | undefined;
     input: unknown;
     output: unknown;
     error: unknown;
@@ -258,6 +273,7 @@ export class RunClient implements RunHandle {
   private async doEmit(args: {
     id: string;
     action_type: string;
+    type: string | undefined;
     input: unknown;
     output: unknown;
     error: unknown;
@@ -269,6 +285,7 @@ export class RunClient implements RunHandle {
   }): Promise<void> {
     const body = this.buildBody(args);
     this.buffer.push(body);
+    this.lastNodeId = args.id;
     if (!this.buffered || this.buffer.length >= BATCH_MAX) {
       await this.flushLocked();
     }
@@ -277,6 +294,7 @@ export class RunClient implements RunHandle {
   private buildBody(args: {
     id: string;
     action_type: string;
+    type: string | undefined;
     input: unknown;
     output: unknown;
     error: unknown;
@@ -291,6 +309,7 @@ export class RunClient implements RunHandle {
       id: args.id,
       action_type: args.action_type,
     };
+    if (args.type !== undefined) body.type = args.type;
     if (args.input !== undefined) body.input = args.input;
     if (args.output !== undefined) body.output = args.output;
     if (args.error !== undefined) body.error = args.error;
@@ -382,6 +401,7 @@ export class RunClient implements RunHandle {
     const body: Record<string, unknown> = {
       run_id: this.run.id,
       action_type: opts.action_type,
+      type: opts.type,
       input: opts.input,
       output: opts.output,
       error: opts.error,
@@ -415,7 +435,26 @@ export class RunClient implements RunHandle {
     const res = await this.http.post<{ data: Node[] }>('/v1/nodes', body);
     const node = res.data[0];
     this.lastHash = node.hash;
+    this.lastNodeId = node.id;
     return node;
+  }
+
+  // ── Signals ─────────────────────────────────────────────────────
+
+  /**
+   * Emit a signal attached to the most recently written node in this run
+   * (or to an explicit `node_id`). Accepts a raw `EmitSignalInput` or the
+   * result of `SignalType.signal(...)`.
+   */
+  async signal(input: EmitSignalInput): Promise<Signal> {
+    await this.flush();
+    const body: EmitSignalInput = {
+      ...input,
+      run_id: input.run_id ?? this.run.id,
+    };
+    const nodeId = input.node_id ?? this.lastNodeId;
+    if (nodeId) body.node_id = nodeId;
+    return this.signals.emit(body);
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────
