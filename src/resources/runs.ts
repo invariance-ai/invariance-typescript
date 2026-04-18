@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { HttpClient } from '../client.js';
 import { hashNodePayload, signEd25519, type NodeHashPayload } from '../crypto.js';
+import { SignalsResource, type EmitSignalInput, type Signal } from './signals.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -188,18 +189,22 @@ interface RunHandle {
  */
 export class RunClient implements RunHandle {
   private lastHash: string | null = null;
+  private lastNodeId: string | null = null;
   private buffer: WriteBody[] = [];
   private closed = false;
   /** Promise chain that serializes writes. The backend cannot detect branched
    * chains, so two concurrent `_emit`s within one run must not run both. */
   private writeChain: Promise<unknown> = Promise.resolve();
+  private readonly signals: SignalsResource;
 
   constructor(
     private readonly http: HttpClient,
     private readonly run: Run,
     private readonly signingKey: string | undefined,
     private readonly buffered: boolean,
-  ) {}
+  ) {
+    this.signals = new SignalsResource(http);
+  }
 
   get runId(): string {
     return this.run.id;
@@ -280,6 +285,7 @@ export class RunClient implements RunHandle {
   }): Promise<void> {
     const body = this.buildBody(args);
     this.buffer.push(body);
+    this.lastNodeId = args.id;
     if (!this.buffered || this.buffer.length >= BATCH_MAX) {
       await this.flushLocked();
     }
@@ -429,7 +435,26 @@ export class RunClient implements RunHandle {
     const res = await this.http.post<{ data: Node[] }>('/v1/nodes', body);
     const node = res.data[0];
     this.lastHash = node.hash;
+    this.lastNodeId = node.id;
     return node;
+  }
+
+  // ── Signals ─────────────────────────────────────────────────────
+
+  /**
+   * Emit a signal attached to the most recently written node in this run
+   * (or to an explicit `node_id`). Accepts a raw `EmitSignalInput` or the
+   * result of `SignalType.signal(...)`.
+   */
+  async signal(input: EmitSignalInput): Promise<Signal> {
+    await this.flush();
+    const body: EmitSignalInput = {
+      ...input,
+      run_id: input.run_id ?? this.run.id,
+    };
+    const nodeId = input.node_id ?? this.lastNodeId;
+    if (nodeId) body.node_id = nodeId;
+    return this.signals.emit(body);
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────

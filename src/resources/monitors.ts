@@ -27,8 +27,8 @@ export type Evaluator =
 export type When = Rule | Evaluator | { match: 'all' | 'any'; rules: Rule[] };
 
 export type Action =
-  | { kind: 'create_finding'; severity: Severity; title: string; message?: string }
-  | { kind: 'emit_signal'; severity: Severity; title: string; message?: string }
+  | { kind: 'create_finding'; severity: Severity; title: string; message?: string; type?: string }
+  | { kind: 'emit_signal'; severity: Severity; title: string; message?: string; type?: string }
   | { kind: 'notify'; channel: 'email' | 'slack' | 'webhook' | 'dashboard'; target: string }
   | { kind: 'mark'; label: string }
   | { kind: 'webhook'; url: string; method?: 'GET' | 'POST'; headers?: Record<string, string> };
@@ -99,8 +99,8 @@ export const evaluator = {
 };
 
 export const action = {
-  createFinding: (opts: { severity: Severity; title: string; message?: string }): Action => ({ kind: 'create_finding', ...opts }),
-  emitSignal: (opts: { severity: Severity; title: string; message?: string }): Action => ({ kind: 'emit_signal', ...opts }),
+  createFinding: (opts: { severity: Severity; title: string; message?: string; type?: string }): Action => ({ kind: 'create_finding', ...opts }),
+  emitSignal: (opts: { severity: Severity; title: string; message?: string; type?: string }): Action => ({ kind: 'emit_signal', ...opts }),
   notify: (channel: 'email' | 'slack' | 'webhook' | 'dashboard', target: string): Action => ({ kind: 'notify', channel, target }),
   mark: (label: string): Action => ({ kind: 'mark', label }),
   webhook: (url: string, opts: { method?: 'GET' | 'POST'; headers?: Record<string, string> } = {}): Action => ({ kind: 'webhook', url, ...opts }),
@@ -121,7 +121,7 @@ interface CompiledDefinition {
   rules: Record<string, unknown>[];
   evaluator?: Record<string, unknown>;
   actions?: Record<string, unknown>[];
-  signal: { title: string; message: string; severity: Severity };
+  signal: { title: string; message: string; severity: Severity; type?: string };
   trigger: Record<string, unknown>;
 }
 
@@ -210,9 +210,9 @@ function compileEvaluator(e: Evaluator): Record<string, unknown> {
 function compileAction(a: Action, defaultSeverity: Severity): Record<string, unknown> {
   switch (a.kind) {
     case 'create_finding':
-      return { type: 'create_finding', severity: a.severity, title: a.title, message: a.message ?? a.title };
+      return { type: 'create_finding', severity: a.severity, title: a.title, message: a.message ?? a.title, ...(a.type ? { signal_type: a.type } : {}) };
     case 'emit_signal':
-      return { type: 'emit_signal', severity: a.severity, title: a.title, message: a.message ?? a.title };
+      return { type: 'emit_signal', severity: a.severity, title: a.title, message: a.message ?? a.title, ...(a.type ? { signal_type: a.type } : {}) };
     case 'notify':
       return { type: 'notify', channel: a.channel, target: a.target };
     case 'mark':
@@ -254,11 +254,12 @@ export function compileMonitor(spec: MonitorSpec): CompiledDefinition {
 
   // Derive canonical signal from first finding/signal action, else spec name.
   const signalAction = actions.find((a) => a.type === 'create_finding' || a.type === 'emit_signal');
-  const signal = signalAction
+  const signal: CompiledDefinition['signal'] = signalAction
     ? {
         title: signalAction.title as string,
         message: signalAction.message as string,
         severity: (signalAction.severity as Severity) ?? spec.severity ?? 'medium',
+        ...(signalAction.signal_type ? { type: signalAction.signal_type as string } : {}),
       }
     : { title: spec.name, message: spec.description ?? spec.name, severity: spec.severity ?? 'medium' };
 
