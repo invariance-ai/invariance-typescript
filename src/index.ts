@@ -5,6 +5,9 @@ import { NodesResource } from './resources/nodes.js';
 import { AgentsResource } from './resources/agents.js';
 import { MonitorsResource } from './resources/monitors.js';
 import { SignalsResource } from './resources/signals.js';
+import { ProofsResource } from './resources/proofs.js';
+import { FindingsResource } from './resources/findings.js';
+import { ReviewsResource } from './resources/reviews.js';
 
 export { InvarianceApiError } from './client.js';
 export { type InvarianceConfig } from './config.js';
@@ -43,6 +46,14 @@ export {
   type Action,
   type Severity,
 } from './resources/monitors.js';
+export { ProofsResource } from './resources/proofs.js';
+export { FindingsResource, type Finding, type FindingStatus } from './resources/findings.js';
+export {
+  ReviewsResource,
+  type Review,
+  type ReviewDecision,
+  type ReviewResolveResponse,
+} from './resources/reviews.js';
 export { trace } from './resources/trace.js';
 export {
   generateKeypair,
@@ -62,6 +73,9 @@ export class Invariance {
   readonly agents: AgentsResource;
   readonly monitors: MonitorsResource;
   readonly signals: SignalsResource;
+  readonly proofs: ProofsResource;
+  readonly findings: FindingsResource;
+  readonly reviews: ReviewsResource;
 
   private constructor(private readonly http: HttpClient, signingKey: string | null) {
     this.runs = new RunsResource(http, signingKey ?? undefined);
@@ -69,6 +83,9 @@ export class Invariance {
     this.agents = new AgentsResource(http);
     this.monitors = new MonitorsResource(http);
     this.signals = new SignalsResource(http);
+    this.proofs = new ProofsResource(http);
+    this.findings = new FindingsResource(http);
+    this.reviews = new ReviewsResource(http);
   }
 
   static init(config: InvarianceConfig): Invariance {

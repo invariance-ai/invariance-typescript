@@ -82,9 +82,16 @@ describe('signal types', () => {
       type: 'dangerous',
       severity: 'high',
       title: 'Dangerous',
-      message: undefined,
       data: { reason: 'x' },
     });
+  });
+
+  it('signals.resolve patches /resolve endpoint', async () => {
+    const { inv, calls } = stubbedInvariance();
+    await inv.signals.resolve('signal_9');
+    const call = calls.find((c) => c.path === '/v1/signals/signal_9/resolve');
+    expect(call).toBeDefined();
+    expect(call!.method).toBe('PATCH');
   });
 
   it('run.signal attaches to last node id', async () => {
@@ -109,14 +116,14 @@ describe('signal types', () => {
     expect(body.data).toEqual({ reason: 'y' });
   });
 
-  it('action.emitSignal(type=...) threads signal_type into compiled definition', () => {
-    const def = compileMonitor({
+  it('action.emitSignal(type=...) threads signal_type into compiled request', () => {
+    const body = compileMonitor({
       name: 'x',
       on: on.node({ action_type: 'tool.use' }),
       when: rule.fieldContains('output', 'danger'),
       do: action.emitSignal({ severity: 'high', title: 'D', type: 'dangerous' }),
     });
-    expect((def.actions?.[0] as Record<string, unknown>).signal_type).toBe('dangerous');
-    expect(def.signal.type).toBe('dangerous');
+    expect(body.signal_type).toBe('dangerous');
+    expect(body.severity).toBe('high');
   });
 });

@@ -1,82 +1,71 @@
 import { describe, it, expect } from 'vitest';
-import { compileMonitor, on, rule, evaluator, action } from './monitors.js';
+import { compileMonitor, on, rule, evaluator, action, MonitorsResource } from './monitors.js';
 import { defineNodeType } from './node-types.js';
+import { HttpClient } from '../client.js';
 
-describe('compileMonitor', () => {
-  it('compiles a session-scoped field rule', () => {
-    const def = compileMonitor({
+describe('compileMonitor → backend CreateMonitorRequest', () => {
+  it('field_contains compiles to keyword evaluator', () => {
+    const body = compileMonitor({
       name: 'pii_leak',
-      on: on.session({ id: 'sess_1' }),
+      on: on.node({ action_type: 'tool.use' }),
       when: rule.fieldContains('output', 'ssn'),
-      do: action.createFinding({ severity: 'high', title: 'PII leak' }),
+      do: action.emitSignal({ severity: 'high', title: 'PII', type: 'pii' }),
     });
-    expect(def.target).toBe('session');
-    expect(def.target_match.scope).toBe('session');
-    expect(def.target_match.filters).toEqual([
-      { field: 'session_id', operator: 'eq', value: 'sess_1' },
-    ]);
-    expect(def.rules).toEqual([
-      { kind: 'field_match', field: 'output', operator: 'contains', value: 'ssn' },
-    ]);
-    expect(def.actions?.[0]).toMatchObject({ type: 'create_finding', severity: 'high' });
-    expect(def.signal).toMatchObject({ severity: 'high', title: 'PII leak' });
+    expect(body).toEqual({
+      name: 'pii_leak',
+      evaluator: { type: 'keyword', field: 'output', keywords: ['ssn'], case_sensitive: false },
+      severity: 'high',
+      signal_type: 'pii',
+    });
   });
 
-  it('compiles a node-type selector with numeric threshold', () => {
+  it('numeric compiles to threshold evaluator', () => {
     const BillingCharge = defineNodeType<{ amount_cents: number }>('billing_charge');
-    const def = compileMonitor({
+    const body = compileMonitor({
       name: 'expensive',
       on: on.node({ type: BillingCharge.type }),
       when: rule.numeric('custom_fields.amount_cents', 'gt', 10000),
-      do: action.notify('slack', '#billing'),
+      do: action.emitSignal({ severity: 'medium', title: 'big' }),
     });
-    expect(def.target_match.scope).toBe('node');
-    expect(def.target_match.filters).toContainEqual({
-      field: 'type',
-      operator: 'eq',
-      value: 'billing_charge',
-    });
-    expect(def.rules[0]).toMatchObject({
-      kind: 'numeric_threshold',
-      operator: 'gt',
+    expect(body.evaluator).toEqual({
+      type: 'threshold',
+      field: 'custom_fields.amount_cents',
+      operator: '>',
       value: 10000,
     });
   });
 
-  it('compiles an LLM judge over an agent run', () => {
-    const def = compileMonitor({
-      name: 'judge_refunds',
-      on: on.run({ agent_id: 'agt_support' }),
-      when: evaluator.judgeLLM({
-        model: 'claude-sonnet-4-6',
-        rubric: 'Refund without approval?',
-      }),
-      do: action.emitSignal({ severity: 'medium', title: 'Unapproved refund' }),
+  it('create_finding sets creates_review', () => {
+    const body = compileMonitor({
+      name: 'x',
+      on: on.node({}),
+      when: rule.fieldContains('output', 'bad'),
+      do: action.createFinding({ severity: 'critical', title: 'Bad', type: 'bad' }),
     });
-    expect(def.evaluator).toMatchObject({
-      type: 'judge_llm',
-      model: 'claude-sonnet-4-6',
-      rubric: 'Refund without approval?',
-    });
-    expect(def.rules).toEqual([]);
-    expect(def.target_match.filters).toEqual([
-      { field: 'agent_id', operator: 'eq', value: 'agt_support' },
-    ]);
+    expect(body.creates_review).toBe(true);
+    expect(body.signal_type).toBe('bad');
   });
 
-  it('compiles composite rules with match=any', () => {
-    const def = compileMonitor({
-      name: 'combo',
-      on: on.agent('agt_x'),
-      when: rule.any(
-        rule.fieldEquals('status', 'error'),
-        rule.exists('error'),
-      ),
-      do: action.mark('reviewed'),
-    });
-    expect(def.match).toBe('any');
-    expect(def.rules).toHaveLength(2);
-    expect(def.actions?.[0]).toEqual({ type: 'mark_object', label: 'reviewed' });
+  it('rejects judge_llm as unsupported', () => {
+    expect(() =>
+      compileMonitor({
+        name: 'j',
+        on: on.run({ agent_id: 'a' }),
+        when: evaluator.judgeLLM({ model: 'claude-sonnet-4-6', rubric: 'ok?' }),
+        do: action.emitSignal({ severity: 'low', title: 't' }),
+      }),
+    ).toThrow(/judge_llm/);
+  });
+
+  it('rejects rule composition', () => {
+    expect(() =>
+      compileMonitor({
+        name: 'combo',
+        on: on.agent('a'),
+        when: rule.any(rule.fieldEquals('status', 'error'), rule.exists('error')),
+        do: action.emitSignal({ severity: 'low', title: 't' }),
+      }),
+    ).toThrow(/composition/);
   });
 });
 
@@ -91,5 +80,47 @@ describe('defineNodeType', () => {
     });
     expect(n.type).toBe('billing_charge');
     expect(n.custom_fields).toEqual({ amount_cents: 500, user_id: 'u_1' });
+  });
+});
+
+describe('MonitorsResource resource surface', () => {
+  function stubHttp(): { http: HttpClient; calls: { method: string; path: string; body: unknown }[] } {
+    const calls: { method: string; path: string; body: unknown }[] = [];
+    const http = new HttpClient('http://t.local', 'inv_test');
+    const record = async (method: string, path: string, body?: unknown): Promise<unknown> => {
+      calls.push({ method, path, body });
+      return { monitor: { id: 'mon_1', name: 'x', created_at: 0 }, data: [], next_cursor: null };
+    };
+    (http as unknown as { post: unknown }).post = (p: string, b?: unknown) => record('POST', p, b);
+    (http as unknown as { get: unknown }).get = (p: string) => record('GET', p);
+    (http as unknown as { request: unknown }).request = (m: string, p: string, b?: unknown) => record(m, p, b);
+    return { http, calls };
+  }
+
+  it('list forwards params', async () => {
+    const { http, calls } = stubHttp();
+    const res = new MonitorsResource(http);
+    await res.list({ limit: 25, status: 'active' });
+    expect(calls[0].path).toBe('/v1/monitors?limit=25&status=active');
+  });
+
+  it('update PUTs a patch', async () => {
+    const { http, calls } = stubHttp();
+    const res = new MonitorsResource(http);
+    await res.update('mon_1', { name: 'renamed', severity: 'critical' });
+    expect(calls[0]).toEqual({
+      method: 'PUT',
+      path: '/v1/monitors/mon_1',
+      body: { name: 'renamed', severity: 'critical' },
+    });
+  });
+
+  it('pause/resume delegate to update with status', async () => {
+    const { http, calls } = stubHttp();
+    const res = new MonitorsResource(http);
+    await res.pause('mon_1');
+    await res.resume('mon_1');
+    expect(calls[0].body).toEqual({ status: 'paused' });
+    expect(calls[1].body).toEqual({ status: 'active' });
   });
 });

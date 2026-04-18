@@ -9,10 +9,10 @@ export interface Signal {
   monitor_execution_id: string | null;
   run_id: string | null;
   node_id: string | null;
-  source: 'monitor' | 'manual';
+  source: 'monitor' | 'manual' | 'detector';
   severity: Severity;
   title: string;
-  message: string;
+  message: string | null;
   status: 'open' | 'acknowledged' | 'resolved';
   type: string | null;
   data: unknown;
@@ -30,11 +30,25 @@ export interface EmitSignalInput {
   run_id?: string;
 }
 
+/** Strip undefined fields so the wire payload stays tidy. */
+export function buildSignalBody(input: EmitSignalInput): EmitSignalInput {
+  const body: EmitSignalInput = {
+    severity: input.severity,
+    title: input.title,
+  };
+  if (input.message !== undefined) body.message = input.message;
+  if (input.type !== undefined) body.type = input.type;
+  if (input.data !== undefined) body.data = input.data;
+  if (input.node_id !== undefined) body.node_id = input.node_id;
+  if (input.run_id !== undefined) body.run_id = input.run_id;
+  return body;
+}
+
 export class SignalsResource {
   constructor(private readonly http: HttpClient) {}
 
   async emit(input: EmitSignalInput): Promise<Signal> {
-    const res = await this.http.post<{ signal: Signal }>('/v1/signals', input);
+    const res = await this.http.post<{ signal: Signal }>('/v1/signals', buildSignalBody(input));
     return res.signal;
   }
 
@@ -55,6 +69,11 @@ export class SignalsResource {
 
   async acknowledge(id: string): Promise<Signal> {
     const res = await this.http.patch<{ signal: Signal }>(`/v1/signals/${id}/acknowledge`);
+    return res.signal;
+  }
+
+  async resolve(id: string): Promise<Signal> {
+    const res = await this.http.patch<{ signal: Signal }>(`/v1/signals/${id}/resolve`);
     return res.signal;
   }
 }

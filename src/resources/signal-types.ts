@@ -1,4 +1,4 @@
-import type { EmitSignalInput } from './signals.js';
+import { buildSignalBody, type EmitSignalInput } from './signals.js';
 import type { Severity } from './monitors.js';
 
 export interface SignalTypeDefaults {
@@ -35,15 +35,15 @@ export function defineSignalType<T = unknown>(
     defaults,
     signal(input) {
       const { data, ...rest } = input;
-      return {
+      return buildSignalBody({
         type,
         severity: rest.severity ?? defaults.severity,
         title: rest.title ?? defaults.title,
         message: rest.message ?? defaults.message,
         data,
-        ...(rest.node_id !== undefined ? { node_id: rest.node_id } : {}),
-        ...(rest.run_id !== undefined ? { run_id: rest.run_id } : {}),
-      };
+        node_id: rest.node_id,
+        run_id: rest.run_id,
+      });
     },
   };
 }
