@@ -25,7 +25,15 @@ export {
   type WriteNodeOptions,
 } from './resources/runs.js';
 export { NodesResource, type WriteNodeInput } from './resources/nodes.js';
-export { AgentsResource, type Agent, type ApiKeyPublic, type MeResponse } from './resources/agents.js';
+export {
+  AgentsResource,
+  type Agent,
+  type ApiKeyPublic,
+  type ApiKeyWithRaw,
+  type MeResponse,
+  type CreateAgentInput,
+  type CreateAgentResponse,
+} from './resources/agents.js';
 export { defineNodeType, type NodeType } from './resources/node-types.js';
 export { SignalsResource, type Signal, type EmitSignalInput } from './resources/signals.js';
 export { defineSignalType, type SignalType, type SignalTypeDefaults } from './resources/signal-types.js';
@@ -39,6 +47,13 @@ export {
   type Monitor,
   type MonitorSpec,
   type MonitorListOptions,
+  type MonitorEvaluator,
+  type MonitorSchedule,
+  type MonitorExecution,
+  type CreateMonitorRequest,
+  type UpdateMonitorRequest,
+  type EvaluateMonitorRequest,
+  type EvaluateMonitorResponse,
   type On,
   type Rule,
   type Evaluator,

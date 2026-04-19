@@ -1,5 +1,8 @@
 import type { HttpClient } from '../client.js';
 import type { ListResponse } from './runs.js';
+import type { Signal } from './signals.js';
+import type { Finding } from './findings.js';
+import type { Review } from './reviews.js';
 
 // ── Public spec (what the user writes) ─────────────────────────────────────
 
@@ -48,25 +51,71 @@ export type MonitorEvaluator =
   | { type: 'keyword'; field: string; keywords: string[]; case_sensitive?: boolean }
   | { type: 'threshold'; field: string; operator: '>' | '>=' | '<' | '<=' | '==' | '!='; value: number };
 
+export interface MonitorSchedule {
+  kind: 'manual' | 'interval';
+  every_seconds?: number;
+}
+
 export interface CreateMonitorRequest {
   name: string;
   description?: string;
+  enabled?: boolean;
   evaluator: MonitorEvaluator;
   severity?: Severity;
-  signal_type?: string | null;
+  schedule?: MonitorSchedule;
   creates_review?: boolean;
+  signal_type?: string | null;
+}
+
+export interface UpdateMonitorRequest {
+  name?: string;
+  description?: string;
+  enabled?: boolean;
+  evaluator?: MonitorEvaluator;
+  schedule?: MonitorSchedule;
+  creates_review?: boolean;
+  signal_type?: string | null;
+}
+
+export interface EvaluateMonitorRequest {
+  run_id?: string;
+  since?: string;
+  limit?: number;
 }
 
 export interface Monitor {
   id: string;
+  agent_id: string;
   name: string;
-  description?: string | null;
-  enabled?: boolean;
-  evaluator?: MonitorEvaluator;
-  severity?: Severity;
-  signal_type?: string | null;
-  created_at: number | string;
-  updated_at?: string;
+  description: string | null;
+  enabled: boolean;
+  evaluator: MonitorEvaluator;
+  severity: Severity;
+  schedule: MonitorSchedule;
+  creates_review: boolean;
+  signal_type: string | null;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MonitorExecution {
+  id: string;
+  monitor_id: string;
+  status: 'running' | 'passed' | 'failed' | 'error';
+  trigger: 'manual' | 'scheduled';
+  matched_node_ids: string[];
+  started_at: string;
+  finished_at: string | null;
+  error?: string | null;
+}
+
+export interface EvaluateMonitorResponse {
+  execution: MonitorExecution;
+  signals: Signal[];
+  findings: Finding[];
+  reviews: Review[];
 }
 
 // ── Builders (ergonomic factories) ─────────────────────────────────────────
@@ -180,7 +229,6 @@ export function compileMonitor(spec: MonitorSpec): CreateMonitorRequest {
 export interface MonitorListOptions {
   cursor?: string;
   limit?: number;
-  status?: 'active' | 'paused' | 'disabled';
 }
 
 export class MonitorsResource {
@@ -200,24 +248,50 @@ export class MonitorsResource {
     const params = new URLSearchParams();
     if (opts.cursor) params.set('cursor', opts.cursor);
     if (opts.limit) params.set('limit', String(opts.limit));
-    if (opts.status) params.set('status', opts.status);
     const qs = params.toString();
     return this.http.get<ListResponse<Monitor>>(`/v1/monitors${qs ? `?${qs}` : ''}`);
   }
 
-  async update(
-    id: string,
-    patch: Partial<Pick<MonitorSpec, 'name' | 'severity'>> & { status?: 'active' | 'paused' },
-  ): Promise<Monitor> {
-    const res = await this.http.request<{ monitor: Monitor }>('PUT', `/v1/monitors/${id}`, patch);
+  async update(id: string, patch: UpdateMonitorRequest): Promise<Monitor> {
+    const res = await this.http.request<{ monitor: Monitor }>('PATCH', `/v1/monitors/${id}`, patch);
     return res.monitor;
   }
 
   pause(id: string): Promise<Monitor> {
-    return this.update(id, { status: 'paused' });
+    return this.update(id, { enabled: false });
   }
 
   resume(id: string): Promise<Monitor> {
-    return this.update(id, { status: 'active' });
+    return this.update(id, { enabled: true });
+  }
+
+  async evaluate(id: string, input: EvaluateMonitorRequest = {}): Promise<EvaluateMonitorResponse> {
+    return this.http.post<EvaluateMonitorResponse>(`/v1/monitors/${id}/evaluate`, input);
+  }
+
+  async executions(
+    id: string,
+    opts: { cursor?: string; limit?: number } = {},
+  ): Promise<ListResponse<MonitorExecution>> {
+    const params = new URLSearchParams();
+    if (opts.cursor) params.set('cursor', opts.cursor);
+    if (opts.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return this.http.get<ListResponse<MonitorExecution>>(
+      `/v1/monitors/${id}/executions${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  async findings(
+    id: string,
+    opts: { cursor?: string; limit?: number } = {},
+  ): Promise<ListResponse<Finding>> {
+    const params = new URLSearchParams();
+    if (opts.cursor) params.set('cursor', opts.cursor);
+    if (opts.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return this.http.get<ListResponse<Finding>>(
+      `/v1/monitors/${id}/findings${qs ? `?${qs}` : ''}`,
+    );
   }
 }

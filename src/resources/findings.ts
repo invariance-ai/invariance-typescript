@@ -1,5 +1,6 @@
 import type { HttpClient } from '../client.js';
 import type { ListResponse } from './runs.js';
+import type { Severity } from './monitors.js';
 
 export type FindingStatus = 'open' | 'review_requested' | 'resolved' | 'dismissed';
 
@@ -10,7 +11,7 @@ export interface Finding {
   signal_id: string;
   run_id: string | null;
   node_id: string | null;
-  severity: string;
+  severity: Severity;
   title: string;
   summary: string;
   status: FindingStatus;

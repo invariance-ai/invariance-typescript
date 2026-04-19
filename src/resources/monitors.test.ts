@@ -100,27 +100,27 @@ describe('MonitorsResource resource surface', () => {
   it('list forwards params', async () => {
     const { http, calls } = stubHttp();
     const res = new MonitorsResource(http);
-    await res.list({ limit: 25, status: 'active' });
-    expect(calls[0].path).toBe('/v1/monitors?limit=25&status=active');
+    await res.list({ limit: 25 });
+    expect(calls[0].path).toBe('/v1/monitors?limit=25');
   });
 
-  it('update PUTs a patch', async () => {
+  it('update PATCHes a patch', async () => {
     const { http, calls } = stubHttp();
     const res = new MonitorsResource(http);
-    await res.update('mon_1', { name: 'renamed', severity: 'critical' });
+    await res.update('mon_1', { name: 'renamed', enabled: false });
     expect(calls[0]).toEqual({
-      method: 'PUT',
+      method: 'PATCH',
       path: '/v1/monitors/mon_1',
-      body: { name: 'renamed', severity: 'critical' },
+      body: { name: 'renamed', enabled: false },
     });
   });
 
-  it('pause/resume delegate to update with status', async () => {
+  it('pause/resume delegate to update with enabled', async () => {
     const { http, calls } = stubHttp();
     const res = new MonitorsResource(http);
     await res.pause('mon_1');
     await res.resume('mon_1');
-    expect(calls[0].body).toEqual({ status: 'paused' });
-    expect(calls[1].body).toEqual({ status: 'active' });
+    expect(calls[0].body).toEqual({ enabled: false });
+    expect(calls[1].body).toEqual({ enabled: true });
   });
 });
