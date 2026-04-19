@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileMonitor, on, rule, evaluator, action, MonitorsResource } from './monitors.js';
+import { compileMonitor, on, rule, action, MonitorsResource } from './monitors.js';
 import { defineNodeType } from './node-types.js';
 import { HttpClient } from '../client.js';
 
@@ -46,26 +46,21 @@ describe('compileMonitor → backend CreateMonitorRequest', () => {
     expect(body.signal_type).toBe('bad');
   });
 
-  it('rejects judge_llm as unsupported', () => {
-    expect(() =>
-      compileMonitor({
-        name: 'j',
-        on: on.run({ agent_id: 'a' }),
-        when: evaluator.judgeLLM({ model: 'claude-sonnet-4-6', rubric: 'ok?' }),
-        do: action.emitSignal({ severity: 'low', title: 't' }),
-      }),
-    ).toThrow(/judge_llm/);
-  });
-
-  it('rejects rule composition', () => {
-    expect(() =>
-      compileMonitor({
-        name: 'combo',
-        on: on.agent('a'),
-        when: rule.any(rule.fieldEquals('status', 'error'), rule.exists('error')),
-        do: action.emitSignal({ severity: 'low', title: 't' }),
-      }),
-    ).toThrow(/composition/);
+  it('numeric eq/neq compile to == / !=', () => {
+    const eqBody = compileMonitor({
+      name: 'eq',
+      on: on.node({}),
+      when: rule.numeric('custom_fields.count', 'eq', 0),
+      do: action.emitSignal({ severity: 'low', title: 'zero' }),
+    });
+    expect((eqBody.evaluator as { operator: string }).operator).toBe('==');
+    const neqBody = compileMonitor({
+      name: 'neq',
+      on: on.node({}),
+      when: rule.numeric('custom_fields.count', 'neq', 0),
+      do: action.emitSignal({ severity: 'low', title: 'nonzero' }),
+    });
+    expect((neqBody.evaluator as { operator: string }).operator).toBe('!=');
   });
 });
 

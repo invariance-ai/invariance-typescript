@@ -42,7 +42,6 @@ export {
   compileMonitor,
   on,
   rule,
-  evaluator,
   action,
   type Monitor,
   type MonitorSpec,
@@ -56,8 +55,7 @@ export {
   type EvaluateMonitorResponse,
   type On,
   type Rule,
-  type Evaluator,
-  type When,
+  type NumericOp,
   type Action,
   type Severity,
 } from './resources/monitors.js';

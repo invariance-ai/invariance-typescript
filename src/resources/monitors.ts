@@ -15,31 +15,21 @@ export type On =
   | { node: { type?: string; action_type?: string; agent_id?: string } }
   | { batch: { window_minutes: number } };
 
+export type NumericOp = 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'neq';
+
 export type Rule =
   | { kind: 'field_equals'; field: string; value: unknown }
   | { kind: 'field_contains'; field: string; value: unknown }
-  | { kind: 'numeric'; field: string; op: 'gt' | 'gte' | 'lt' | 'lte'; value: number }
-  | { kind: 'exists'; field: string; exists?: boolean }
-  | { kind: 'frequency'; field: string; value: unknown; per_minutes: number; op: 'gt' | 'gte' | 'lt' | 'lte'; threshold: number; window_minutes: number };
-
-export type Evaluator =
-  | { kind: 'judge_llm'; model: string; rubric: string; output_schema?: Record<string, unknown>; max_tokens?: number }
-  | { kind: 'judge_human'; queue: string; instructions?: string; notify?: ('email' | 'slack' | 'dashboard')[] }
-  | { kind: 'code'; runtime?: 'hosted' | 'customer'; inline_script: string };
-
-export type When = Rule | Evaluator | { match: 'all' | 'any'; rules: Rule[] };
+  | { kind: 'numeric'; field: string; op: NumericOp; value: number };
 
 export type Action =
   | { kind: 'create_finding'; severity: Severity; title: string; message?: string; type?: string }
-  | { kind: 'emit_signal'; severity: Severity; title: string; message?: string; type?: string }
-  | { kind: 'notify'; channel: 'email' | 'slack' | 'webhook' | 'dashboard'; target: string }
-  | { kind: 'mark'; label: string }
-  | { kind: 'webhook'; url: string; method?: 'GET' | 'POST'; headers?: Record<string, string> };
+  | { kind: 'emit_signal'; severity: Severity; title: string; message?: string; type?: string };
 
 export interface MonitorSpec {
   name: string;
   on: On;
-  when: When;
+  when: Rule;
   do: Action | Action[];
   severity?: Severity;
   description?: string;
@@ -131,48 +121,23 @@ export const on = {
 export const rule = {
   fieldEquals: (field: string, value: unknown): Rule => ({ kind: 'field_equals', field, value }),
   fieldContains: (field: string, value: unknown): Rule => ({ kind: 'field_contains', field, value }),
-  numeric: (field: string, op: 'gt' | 'gte' | 'lt' | 'lte', value: number): Rule => ({ kind: 'numeric', field, op, value }),
-  exists: (field: string, exists = true): Rule => ({ kind: 'exists', field, exists }),
-  frequency: (
-    field: string,
-    value: unknown,
-    opts: { per_minutes: number; op: 'gt' | 'gte' | 'lt' | 'lte'; threshold: number; window_minutes: number },
-  ): Rule => ({ kind: 'frequency', field, value, ...opts }),
-  all: (...rules: Rule[]): When => ({ match: 'all', rules }),
-  any: (...rules: Rule[]): When => ({ match: 'any', rules }),
-};
-
-export const evaluator = {
-  judgeLLM: (opts: { model: string; rubric: string; output_schema?: Record<string, unknown>; max_tokens?: number }): Evaluator => ({
-    kind: 'judge_llm',
-    ...opts,
-  }),
-  judgeHuman: (opts: { queue: string; instructions?: string; notify?: ('email' | 'slack' | 'dashboard')[] }): Evaluator => ({
-    kind: 'judge_human',
-    ...opts,
-  }),
-  code: (inline_script: string, opts: { runtime?: 'hosted' | 'customer' } = {}): Evaluator => ({
-    kind: 'code',
-    inline_script,
-    ...opts,
-  }),
+  numeric: (field: string, op: NumericOp, value: number): Rule => ({ kind: 'numeric', field, op, value }),
 };
 
 export const action = {
   createFinding: (opts: { severity: Severity; title: string; message?: string; type?: string }): Action => ({ kind: 'create_finding', ...opts }),
   emitSignal: (opts: { severity: Severity; title: string; message?: string; type?: string }): Action => ({ kind: 'emit_signal', ...opts }),
-  notify: (channel: 'email' | 'slack' | 'webhook' | 'dashboard', target: string): Action => ({ kind: 'notify', channel, target }),
-  mark: (label: string): Action => ({ kind: 'mark', label }),
-  webhook: (url: string, opts: { method?: 'GET' | 'POST'; headers?: Record<string, string> } = {}): Action => ({ kind: 'webhook', url, ...opts }),
 };
 
 // ── Compilation: MonitorSpec → backend CreateMonitorRequest ────────────────
 
-const OP_MAP: Record<'gt' | 'gte' | 'lt' | 'lte', '>' | '>=' | '<' | '<='> = {
+const OP_MAP: Record<NumericOp, '>' | '>=' | '<' | '<=' | '==' | '!='> = {
   gt: '>',
   gte: '>=',
   lt: '<',
   lte: '<=',
+  eq: '==',
+  neq: '!=',
 };
 
 function compileRuleToEvaluator(r: Rule): MonitorEvaluator {
@@ -183,34 +148,14 @@ function compileRuleToEvaluator(r: Rule): MonitorEvaluator {
       return { type: 'keyword', field: r.field, keywords: [String(r.value)], case_sensitive: true };
     case 'numeric':
       return { type: 'threshold', field: r.field, operator: OP_MAP[r.op], value: r.value };
-    case 'exists':
-    case 'frequency':
-      throw new Error(
-        `rule.${r.kind} is not supported by the current backend evaluator`,
-      );
   }
 }
 
 export function compileMonitor(spec: MonitorSpec): CreateMonitorRequest {
-  if ('match' in spec.when) {
-    throw new Error('rule.any/all composition is not supported by the current backend evaluator');
-  }
-  if (spec.when.kind === 'judge_llm' || spec.when.kind === 'judge_human' || spec.when.kind === 'code') {
-    throw new Error(`evaluator.${spec.when.kind} is not supported by the current backend evaluator`);
-  }
-
   const evaluatorBody = compileRuleToEvaluator(spec.when);
 
   const actions = Array.isArray(spec.do) ? spec.do : [spec.do];
-  for (const a of actions) {
-    if (a.kind === 'notify' || a.kind === 'mark' || a.kind === 'webhook') {
-      throw new Error(`action.${a.kind} is not supported by the current backend`);
-    }
-  }
-
-  const signalAction = actions.find((a) => a.kind === 'emit_signal' || a.kind === 'create_finding') as
-    | (Action & { kind: 'emit_signal' | 'create_finding' })
-    | undefined;
+  const signalAction = actions.find((a) => a.kind === 'emit_signal' || a.kind === 'create_finding');
   const createsReview = actions.some((a) => a.kind === 'create_finding');
 
   const body: CreateMonitorRequest = {
