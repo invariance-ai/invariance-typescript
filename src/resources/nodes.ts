@@ -1,5 +1,6 @@
 import type { HttpClient } from '../client.js';
 import type { Node, ListResponse } from './runs.js';
+import { pagePath, type PageOptions } from './query.js';
 
 export interface WriteNodeInput {
   action_type: string;
@@ -30,14 +31,8 @@ export class NodesResource {
 
   async list(
     runId: string,
-    opts?: { cursor?: string; limit?: number },
+    opts: PageOptions = {},
   ): Promise<ListResponse<Node>> {
-    let path = `/v1/runs/${runId}/nodes`;
-    const params = new URLSearchParams();
-    if (opts?.cursor) params.set('cursor', opts.cursor);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    if (qs) path += `?${qs}`;
-    return this.http.get<ListResponse<Node>>(path);
+    return this.http.get<ListResponse<Node>>(pagePath(`/v1/runs/${runId}/nodes`, opts));
   }
 }

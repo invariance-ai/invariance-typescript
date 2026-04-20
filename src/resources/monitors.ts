@@ -3,6 +3,7 @@ import type { ListResponse } from './runs.js';
 import type { Signal } from './signals.js';
 import type { Finding } from './findings.js';
 import type { Review } from './reviews.js';
+import { pagePath, type PageOptions } from './query.js';
 
 // ── Public spec (what the user writes) ─────────────────────────────────────
 
@@ -171,10 +172,7 @@ export function compileMonitor(spec: MonitorSpec): CreateMonitorRequest {
 
 // ── Resource ───────────────────────────────────────────────────────────────
 
-export interface MonitorListOptions {
-  cursor?: string;
-  limit?: number;
-}
+export type MonitorListOptions = PageOptions;
 
 export class MonitorsResource {
   constructor(private readonly http: HttpClient) {}
@@ -190,11 +188,7 @@ export class MonitorsResource {
   }
 
   async list(opts: MonitorListOptions = {}): Promise<ListResponse<Monitor>> {
-    const params = new URLSearchParams();
-    if (opts.cursor) params.set('cursor', opts.cursor);
-    if (opts.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    return this.http.get<ListResponse<Monitor>>(`/v1/monitors${qs ? `?${qs}` : ''}`);
+    return this.http.get<ListResponse<Monitor>>(pagePath('/v1/monitors', opts));
   }
 
   async update(id: string, patch: UpdateMonitorRequest): Promise<Monitor> {
@@ -216,27 +210,19 @@ export class MonitorsResource {
 
   async executions(
     id: string,
-    opts: { cursor?: string; limit?: number } = {},
+    opts: PageOptions = {},
   ): Promise<ListResponse<MonitorExecution>> {
-    const params = new URLSearchParams();
-    if (opts.cursor) params.set('cursor', opts.cursor);
-    if (opts.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
     return this.http.get<ListResponse<MonitorExecution>>(
-      `/v1/monitors/${id}/executions${qs ? `?${qs}` : ''}`,
+      pagePath(`/v1/monitors/${id}/executions`, opts),
     );
   }
 
   async findings(
     id: string,
-    opts: { cursor?: string; limit?: number } = {},
+    opts: PageOptions = {},
   ): Promise<ListResponse<Finding>> {
-    const params = new URLSearchParams();
-    if (opts.cursor) params.set('cursor', opts.cursor);
-    if (opts.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
     return this.http.get<ListResponse<Finding>>(
-      `/v1/monitors/${id}/findings${qs ? `?${qs}` : ''}`,
+      pagePath(`/v1/monitors/${id}/findings`, opts),
     );
   }
 }

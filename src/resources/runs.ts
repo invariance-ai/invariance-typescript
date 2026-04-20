@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { HttpClient } from '../client.js';
 import { hashNodePayload, signEd25519, type NodeHashPayload } from '../crypto.js';
 import { SignalsResource, type EmitSignalInput, type Signal } from './signals.js';
+import { pagePath, type PageOptions } from './query.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -528,14 +529,8 @@ export class RunsResource {
     }
   }
 
-  async list(opts?: { cursor?: string; limit?: number }): Promise<ListResponse<Run>> {
-    let path = '/v1/runs';
-    const params = new URLSearchParams();
-    if (opts?.cursor) params.set('cursor', opts.cursor);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    if (qs) path += `?${qs}`;
-    return this.http.get<ListResponse<Run>>(path);
+  async list(opts: PageOptions = {}): Promise<ListResponse<Run>> {
+    return this.http.get<ListResponse<Run>>(pagePath('/v1/runs', opts));
   }
 
   async get(id: string): Promise<RunClient> {
