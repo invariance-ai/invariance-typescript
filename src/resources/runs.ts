@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { HttpClient } from '../client.js';
+import type { Features } from '../config.js';
 import { hashNodePayload, signEd25519, type NodeHashPayload } from '../crypto.js';
 import { SignalsResource, type EmitSignalInput, type Signal } from './signals.js';
 
@@ -62,6 +63,8 @@ export interface StartRunOptions {
    * flush/close. Defaults to true. Set false for per-node POSTs.
    */
   buffered?: boolean;
+  /** Deterministic seed persisted on the run. Requires features.replay=true. */
+  replaySeed?: string;
 }
 
 export interface StepOptions {
@@ -71,6 +74,23 @@ export interface StepOptions {
   custom_fields?: Record<string, unknown>;
   /** Declared custom node type (see defineNodeType). */
   type?: string;
+  /** Multi-agent handoff metadata — populated when a node represents a delegation. */
+  handoffFrom?: string;
+  handoffTo?: string;
+  handoffReason?: string;
+}
+
+export interface HandoffOptions {
+  toAgentId: string;
+  fromAgentId?: string;
+  message?: unknown;
+  reason?: string;
+}
+
+export interface ForkRunOptions {
+  fromNodeId: string;
+  name?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface WriteNodeOptions {
@@ -118,6 +138,9 @@ export class Step {
   metadata: Record<string, unknown> | undefined;
   custom_fields: Record<string, unknown> | undefined;
   type: string | undefined;
+  handoffFrom: string | undefined;
+  handoffTo: string | undefined;
+  handoffReason: string | undefined;
   private readonly startMs = Date.now();
   private closed = false;
 
@@ -132,6 +155,9 @@ export class Step {
     this.metadata = opts.metadata;
     this.custom_fields = opts.custom_fields;
     this.type = opts.type;
+    this.handoffFrom = opts.handoffFrom;
+    this.handoffTo = opts.handoffTo;
+    this.handoffReason = opts.handoffReason;
   }
 
   /** Emit the node. Safe to call once. */
@@ -151,25 +177,33 @@ export class Step {
       parent_id: this.parent_id,
       timestamp: this.startMs,
       duration_ms: Date.now() - this.startMs,
+      handoff_from: this.handoffFrom,
+      handoff_to: this.handoffTo,
+      handoff_reason: this.handoffReason,
     });
   }
 }
 
+interface EmitArgs {
+  id: string;
+  action_type: string;
+  type: string | undefined;
+  input: unknown;
+  output: unknown;
+  error: unknown;
+  metadata: Record<string, unknown> | undefined;
+  custom_fields: Record<string, unknown> | undefined;
+  parent_id: string | null;
+  timestamp: number;
+  duration_ms: number;
+  handoff_from?: string;
+  handoff_to?: string;
+  handoff_reason?: string;
+}
+
 /** Minimal interface Step needs from a Run — lets us share Step with future AsyncLocalStorage variants. */
 interface RunHandle {
-  _emit(args: {
-    id: string;
-    action_type: string;
-    type: string | undefined;
-    input: unknown;
-    output: unknown;
-    error: unknown;
-    metadata: Record<string, unknown> | undefined;
-    custom_fields: Record<string, unknown> | undefined;
-    parent_id: string | null;
-    timestamp: number;
-    duration_ms: number;
-  }): Promise<void>;
+  _emit(args: EmitArgs): Promise<void>;
 }
 
 // ── Run ────────────────────────────────────────────────────────────────────
@@ -252,37 +286,13 @@ export class RunClient implements RunHandle {
 
   // ── Low-level node emit (used by Step) ───────────────────────────
 
-  async _emit(args: {
-    id: string;
-    action_type: string;
-    type: string | undefined;
-    input: unknown;
-    output: unknown;
-    error: unknown;
-    metadata: Record<string, unknown> | undefined;
-    custom_fields: Record<string, unknown> | undefined;
-    parent_id: string | null;
-    timestamp: number;
-    duration_ms: number;
-  }): Promise<void> {
+  async _emit(args: EmitArgs): Promise<void> {
     const run = this.writeChain.then(() => this.doEmit(args));
     this.writeChain = run.catch(() => undefined);
     await run;
   }
 
-  private async doEmit(args: {
-    id: string;
-    action_type: string;
-    type: string | undefined;
-    input: unknown;
-    output: unknown;
-    error: unknown;
-    metadata: Record<string, unknown> | undefined;
-    custom_fields: Record<string, unknown> | undefined;
-    parent_id: string | null;
-    timestamp: number;
-    duration_ms: number;
-  }): Promise<void> {
+  private async doEmit(args: EmitArgs): Promise<void> {
     const body = this.buildBody(args);
     this.buffer.push(body);
     this.lastNodeId = args.id;
@@ -291,19 +301,7 @@ export class RunClient implements RunHandle {
     }
   }
 
-  private buildBody(args: {
-    id: string;
-    action_type: string;
-    type: string | undefined;
-    input: unknown;
-    output: unknown;
-    error: unknown;
-    metadata: Record<string, unknown> | undefined;
-    custom_fields: Record<string, unknown> | undefined;
-    parent_id: string | null;
-    timestamp: number;
-    duration_ms: number;
-  }): WriteBody {
+  private buildBody(args: EmitArgs): WriteBody {
     const body: WriteBody = {
       run_id: this.run.id,
       id: args.id,
@@ -316,6 +314,9 @@ export class RunClient implements RunHandle {
     if (args.metadata !== undefined) body.metadata = args.metadata;
     if (args.custom_fields !== undefined) body.custom_fields = args.custom_fields;
     if (args.parent_id !== null) body.parent_id = args.parent_id;
+    if (args.handoff_from !== undefined) body.handoff_from = args.handoff_from;
+    if (args.handoff_to !== undefined) body.handoff_to = args.handoff_to;
+    if (args.handoff_reason !== undefined) body.handoff_reason = args.handoff_reason;
     body.duration_ms = args.duration_ms;
 
     if (this.signingKey) {
@@ -446,6 +447,24 @@ export class RunClient implements RunHandle {
    * (or to an explicit `node_id`). Accepts a raw `EmitSignalInput` or the
    * result of `SignalType.signal(...)`.
    */
+  /**
+   * Emit a typed `handoff` node marking delegation to another agent. Dashboards
+   * render these as boundaries between swimlane rows.
+   */
+  async handoff(opts: HandoffOptions): Promise<void> {
+    await this.step(
+      'handoff',
+      {
+        type: 'handoff',
+        input: opts.message !== undefined ? { message: opts.message } : undefined,
+        handoffFrom: opts.fromAgentId ?? this.run.agent_id,
+        handoffTo: opts.toAgentId,
+        handoffReason: opts.reason,
+      },
+      async () => {},
+    );
+  }
+
   async signal(input: EmitSignalInput): Promise<Signal> {
     await this.flush();
     const body: EmitSignalInput = {
@@ -491,10 +510,15 @@ type WriteBody = Record<string, unknown>;
 // ── Runs resource ──────────────────────────────────────────────────────────
 
 export class RunsResource {
+  private readonly features: Features;
+
   constructor(
     private readonly http: HttpClient,
     private readonly defaultSigningKey?: string,
-  ) {}
+    features?: Features,
+  ) {
+    this.features = features ?? { replay: false, costTracking: true };
+  }
 
   /** Overload: callback form auto-finishes the run on completion (failing on throw). */
   async start<T>(
@@ -507,10 +531,17 @@ export class RunsResource {
     opts: StartRunOptions = {},
     fn?: (run: RunClient) => Promise<T>,
   ): Promise<T | RunClient> {
-    const res = await this.http.post<{ run: Run }>('/v1/runs', {
+    if (opts.replaySeed !== undefined && !this.features.replay) {
+      throw new Error(
+        'replaySeed requires features.replay=true (set INVARIANCE_FEATURE_REPLAY=true)',
+      );
+    }
+    const body: Record<string, unknown> = {
       name: opts.name,
       metadata: opts.metadata,
-    });
+    };
+    if (opts.replaySeed !== undefined) body.replay_seed = opts.replaySeed;
+    const res = await this.http.post<{ run: Run }>('/v1/runs', body);
     const client = new RunClient(
       this.http,
       res.run,
@@ -526,6 +557,21 @@ export class RunsResource {
       await client.fail(err instanceof Error ? err.message : String(err));
       throw err;
     }
+  }
+
+  /** Fork a run from a given node. Requires features.replay=true. */
+  async fork(runId: string, opts: ForkRunOptions): Promise<RunClient> {
+    if (!this.features.replay) {
+      throw new Error(
+        'fork() requires features.replay=true (set INVARIANCE_FEATURE_REPLAY=true)',
+      );
+    }
+    const res = await this.http.post<{ run: Run }>(`/v1/runs/${runId}/fork`, {
+      from_node_id: opts.fromNodeId,
+      name: opts.name,
+      metadata: opts.metadata,
+    });
+    return new RunClient(this.http, res.run, this.defaultSigningKey, true);
   }
 
   async list(opts?: { cursor?: string; limit?: number }): Promise<ListResponse<Run>> {
