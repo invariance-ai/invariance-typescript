@@ -1,7 +1,14 @@
 import type { HttpClient } from '../client.js';
 
 export type NarrativeProvider = 'anthropic' | 'openai' | 'google';
-export type NarrativeScorer = 'severity';
+
+/**
+ * Scorer used by the backend to select "interesting" nodes for synthesis.
+ * Widened to `string` (rather than a literal union) so older SDK builds keep
+ * parsing narratives when the backend adds new scorers. Known values as of
+ * this release: `"severity"`.
+ */
+export type NarrativeScorer = string;
 
 export interface Narrative {
   run_id: string;
@@ -9,7 +16,6 @@ export interface Narrative {
   narrative: string;
   key_moments: string[];
   root_cause: string;
-  /** Scorer used to select nodes for synthesis. Reserved for future scorers (v1: 'severity' only). */
   scorer: NarrativeScorer;
   model: string;
   provider: NarrativeProvider;
@@ -36,8 +42,11 @@ export class NarrativesResource {
   constructor(private readonly http: HttpClient) {}
 
   async get(runId: string, opts: GetNarrativeOptions = {}): Promise<Narrative> {
-    const qs = opts.refresh ? '?refresh=true' : '';
-    const res = await this.http.get<{ narrative: Narrative }>(`/v1/runs/${runId}/narrative${qs}`);
+    const params = new URLSearchParams();
+    if (opts.refresh) params.set('refresh', 'true');
+    const qs = params.toString();
+    const path = `/v1/runs/${runId}/narrative${qs ? `?${qs}` : ''}`;
+    const res = await this.http.get<{ narrative: Narrative }>(path);
     return res.narrative;
   }
 }
