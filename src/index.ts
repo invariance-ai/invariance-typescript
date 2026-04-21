@@ -98,8 +98,10 @@ export class Invariance {
   readonly findings: FindingsResource;
   readonly reviews: ReviewsResource;
   readonly narratives: NarrativesResource;
+  readonly http: HttpClient;
 
-  private constructor(private readonly http: HttpClient, signingKey: string | null) {
+  private constructor(http: HttpClient, signingKey: string | null) {
+    this.http = http;
     this.runs = new RunsResource(http, signingKey ?? undefined);
     this.nodes = new NodesResource(http);
     this.agents = new AgentsResource(http);

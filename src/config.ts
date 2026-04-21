@@ -23,3 +23,14 @@ export function resolveConfig(config: InvarianceConfig): ResolvedConfig {
     signingKey: config.signingKey ?? null,
   };
 }
+
+export interface StoredProfile {
+  apiKey: string;
+  apiUrl?: string;
+  signingKey?: string;
+}
+
+export interface CredentialsFile {
+  default?: string;
+  profiles: Record<string, StoredProfile>;
+}

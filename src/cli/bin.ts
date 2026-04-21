@@ -1,114 +1,56 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { Invariance } from '../index.js';
-import { DEFAULT_API_URL } from '../config.js';
-
-function getClient(opts: { apiKey?: string; apiUrl?: string }): Invariance {
-  const apiKey = opts.apiKey ?? process.env.INVARIANCE_API_KEY;
-  if (!apiKey) {
-    console.error('Error: API key required. Use --api-key or set INVARIANCE_API_KEY.');
-    process.exit(1);
-  }
-  return Invariance.init({
-    apiKey,
-    apiUrl: opts.apiUrl ?? process.env.INVARIANCE_API_URL ?? DEFAULT_API_URL,
-  });
-}
-
-function parseJsonFlag(name: string, value: string | undefined): unknown {
-  if (value === undefined) return undefined;
-  try {
-    return JSON.parse(value);
-  } catch (err) {
-    console.error(`Error: invalid JSON in --${name}: ${(err as Error).message}`);
-    process.exit(1);
-  }
-}
-
-function output(data: unknown, _json: boolean) {
-  console.log(JSON.stringify(data, null, 2));
-}
+import { handleError } from './output.js';
+import { register as registerRuns } from './commands/runs.js';
+import { register as registerNodes } from './commands/nodes.js';
+import { register as registerMonitors } from './commands/monitors.js';
+import { register as registerSignals } from './commands/signals.js';
+import { register as registerFindings } from './commands/findings.js';
+import { register as registerReviews } from './commands/reviews.js';
+import { register as registerAgents } from './commands/agents.js';
+import { register as registerMetrics } from './commands/metrics.js';
+import { register as registerTrace } from './commands/trace.js';
+import { register as registerAuth } from './commands/auth.js';
+import { register as registerDocs } from './commands/docs.js';
 
 const program = new Command();
-program.name('invariance').description('Invariance CLI').version('0.0.0');
 
-// Global options
-program.option('--api-key <key>', 'API key');
-program.option('--api-url <url>', 'API base URL');
-program.option('--json', 'JSON output', false);
+program
+  .name('invariance')
+  .description(
+    'Invariance CLI — control runs, nodes, monitors, signals, findings, reviews, and agents.\n' +
+      'Run `invariance docs quickstart` for a 5-step walkthrough.',
+  )
+  .version('0.1.0');
 
-// ── Runs ────────────────────────────────────────────────────────────────────
+program.option('--api-key <key>', 'API key (or INVARIANCE_API_KEY)');
+program.option('--api-url <url>', 'API base URL (or INVARIANCE_API_URL)');
+program.option('--profile <name>', 'Credentials profile name');
+program.option('--output <format>', 'json | table | yaml');
+program.option('--json', 'Alias for --output json', false);
+program.option('--quiet', 'Suppress non-essential output', false);
+program.option('--no-color', 'Disable ANSI color');
 
-const runs = program.command('runs').description('Manage runs');
+registerAuth(program);
+registerRuns(program);
+registerNodes(program);
+registerMonitors(program);
+registerSignals(program);
+registerFindings(program);
+registerReviews(program);
+registerAgents(program);
+registerMetrics(program);
+registerTrace(program);
+registerDocs(program);
 
-runs
-  .command('start')
-  .description('Start a new run')
-  .option('--name <name>', 'Run name')
-  .action(async (opts) => {
-    const inv = getClient(program.opts());
-    const run = await inv.runs.start({ name: opts.name });
-    output({ id: run.runId, name: run.name, status: run.status }, program.opts().json);
-  });
+program.addHelpText(
+  'after',
+  `\nGetting started:
+  $ invariance auth login
+  $ invariance docs quickstart
 
-runs
-  .command('list')
-  .description('List runs')
-  .action(async () => {
-    const inv = getClient(program.opts());
-    const result = await inv.runs.list();
-    output(result, program.opts().json);
-  });
+Credential precedence: --api-key > INVARIANCE_API_KEY > ~/.invariance/credentials.json
+`,
+);
 
-runs
-  .command('show <id>')
-  .description('Show a run')
-  .action(async (id: string) => {
-    const inv = getClient(program.opts());
-    const run = await inv.runs.get(id);
-    output({ id: run.runId, name: run.name, status: run.status }, program.opts().json);
-  });
-
-runs
-  .command('verify <id>')
-  .description('Verify run proof chain')
-  .action(async (id: string) => {
-    const inv = getClient(program.opts());
-    const run = await inv.runs.get(id);
-    const proof = await run.verify();
-    output(proof, program.opts().json);
-  });
-
-// ── Nodes ───────────────────────────────────────────────────────────────────
-
-const nodes = program.command('nodes').description('Manage nodes');
-
-nodes
-  .command('write <run_id>')
-  .description('Write a node')
-  .requiredOption('--action-type <type>', 'Action type')
-  .option('--input <json>', 'Input JSON')
-  .option('--output <json>', 'Output JSON')
-  .action(async (runId: string, opts) => {
-    const inv = getClient(program.opts());
-    const result = await inv.nodes.write(runId, [{
-      action_type: opts.actionType,
-      input: parseJsonFlag('input', opts.input),
-      output: parseJsonFlag('output', opts.output),
-    }]);
-    output(result, program.opts().json);
-  });
-
-nodes
-  .command('list <run_id>')
-  .description('List nodes for a run')
-  .action(async (runId: string) => {
-    const inv = getClient(program.opts());
-    const result = await inv.nodes.list(runId);
-    output(result, program.opts().json);
-  });
-
-program.parseAsync().catch((err) => {
-  console.error(err.message ?? err);
-  process.exit(1);
-});
+program.parseAsync().catch((err) => handleError(err));
