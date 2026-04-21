@@ -11,7 +11,9 @@ import { ReviewsResource } from './resources/reviews.js';
 import { NarrativesResource } from './resources/narratives.js';
 
 export { InvarianceApiError } from './client.js';
-export { type InvarianceConfig } from './config.js';
+export { DEFAULT_API_URL, resolveConfig, type InvarianceConfig, type Features, type ResolvedConfig } from './config.js';
+export { withReproducibility, type ReproducibilityOptions } from './replay.js';
+export { instrumentOpenAI, instrumentAnthropic, priceCall, registerPricing, type PricingEntry } from './providers/index.js';
 export {
   RunClient,
   RunsResource,
@@ -97,10 +99,16 @@ export class Invariance {
   readonly proofs: ProofsResource;
   readonly findings: FindingsResource;
   readonly reviews: ReviewsResource;
+  readonly features: import('./config.js').Features;
   readonly narratives: NarrativesResource;
 
-  private constructor(private readonly http: HttpClient, signingKey: string | null) {
-    this.runs = new RunsResource(http, signingKey ?? undefined);
+  private constructor(
+    private readonly http: HttpClient,
+    signingKey: string | null,
+    features: import('./config.js').Features,
+  ) {
+    this.features = features;
+    this.runs = new RunsResource(http, signingKey ?? undefined, features);
     this.nodes = new NodesResource(http);
     this.agents = new AgentsResource(http);
     this.monitors = new MonitorsResource(http);
@@ -111,9 +119,9 @@ export class Invariance {
     this.narratives = new NarrativesResource(http);
   }
 
-  static init(config: InvarianceConfig): Invariance {
+  static init(config: InvarianceConfig = {}): Invariance {
     const resolved = resolveConfig(config);
     const http = new HttpClient(resolved.apiUrl, resolved.apiKey);
-    return new Invariance(http, resolved.signingKey);
+    return new Invariance(http, resolved.signingKey, resolved.features);
   }
 }
