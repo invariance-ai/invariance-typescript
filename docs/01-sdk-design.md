@@ -38,14 +38,14 @@ Do not add methods for:
 
 Product/developer API uses `run`.
 
-Backend API uses `session`.
+Backend API should use `run` as well. Older `session` naming is legacy.
 
 SDK maps:
 
 ```text
-run.id -> session.id
+run.id -> run.id
 run.node(...) -> POST /v1/trace/events
-run.finish() -> PATCH /v1/sessions/:id
+run.finish() -> PATCH /v1/runs/:id
 ```
 
 Use `node`, not `traceNode`, in the public SDK.

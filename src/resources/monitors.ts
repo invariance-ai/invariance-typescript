@@ -125,6 +125,7 @@ export interface EvaluateMonitorResponse {
 // ── Builders (ergonomic factories) ─────────────────────────────────────────
 
 export const on = {
+  // Legacy alias retained for older callers; new code should prefer `on.run(...)`.
   session: (match: { id?: string; tags?: string[] } = {}): On => ({ session: match }),
   run: (match: { id?: string; agent_id?: string } = {}): On => ({ run: match }),
   agent: (id: string): On => ({ agent: { id } }),
@@ -169,8 +170,8 @@ function compileRuleToEvaluator(r: Rule): MonitorEvaluator {
 function compileOnToScopeTarget(spec: On): Pick<CreateMonitorRequest, 'scope' | 'target'> {
   if ('session' in spec) {
     return spec.session.id
-      ? { scope: 'session', target: { kind: 'specific_run', run_id: spec.session.id } }
-      : { scope: 'session', target: { kind: 'current_run' } };
+      ? { scope: 'run', target: { kind: 'specific_run', run_id: spec.session.id } }
+      : { scope: 'run', target: { kind: 'current_run' } };
   }
   if ('run' in spec) {
     return spec.run.id
