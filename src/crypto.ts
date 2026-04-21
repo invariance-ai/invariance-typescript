@@ -59,6 +59,9 @@ export interface NodeHashPayload {
   timestamp: number;
   duration_ms: number | null;
   previous_hashes: string[];
+  handoff_from?: string;
+  handoff_to?: string;
+  handoff_reason?: string;
 }
 
 export function hashNodePayload(payload: NodeHashPayload): string {

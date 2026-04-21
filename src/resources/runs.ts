@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { HttpClient } from '../client.js';
 import type { Features } from '../config.js';
 import { hashNodePayload, signEd25519, type NodeHashPayload } from '../crypto.js';
+import { buildHandoffToken, HandoffToken } from '../handoff-token.js';
 import { SignalsResource, type EmitSignalInput, type Signal } from './signals.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -65,6 +66,9 @@ export interface StartRunOptions {
   buffered?: boolean;
   /** Deterministic seed persisted on the run. Requires features.replay=true. */
   replaySeed?: string;
+  /** Encoded handoff attestation token from the sending agent's `run.handoff()`.
+   *  Server verifies Ed25519 signature + binds this run to the signed handoff node. */
+  parentHandoffToken?: string;
 }
 
 export interface StepOptions {
@@ -333,6 +337,9 @@ export class RunClient implements RunHandle {
         timestamp: args.timestamp,
         duration_ms: args.duration_ms,
         previous_hashes: prev,
+        handoff_from: args.handoff_from,
+        handoff_to: args.handoff_to,
+        handoff_reason: args.handoff_reason,
       });
       body.timestamp = args.timestamp;
       body.previous_hashes = prev;
@@ -356,6 +363,9 @@ export class RunClient implements RunHandle {
     timestamp: number;
     duration_ms: number | null;
     previous_hashes: string[];
+    handoff_from: string | undefined;
+    handoff_to: string | undefined;
+    handoff_reason: string | undefined;
   }): { signature: string; hash: string } {
     const payload: NodeHashPayload = {
       id: args.id,
@@ -371,6 +381,9 @@ export class RunClient implements RunHandle {
       timestamp: args.timestamp,
       duration_ms: args.duration_ms,
       previous_hashes: args.previous_hashes,
+      handoff_from: args.handoff_from,
+      handoff_to: args.handoff_to,
+      handoff_reason: args.handoff_reason,
     };
     const hash = hashNodePayload(payload);
     return { signature: signEd25519(hash, this.signingKey!), hash };
@@ -428,6 +441,9 @@ export class RunClient implements RunHandle {
         timestamp,
         duration_ms: opts.duration_ms ?? null,
         previous_hashes,
+        handoff_from: undefined,
+        handoff_to: undefined,
+        handoff_reason: undefined,
       });
       body.id = id;
       body.signature = signature;
@@ -451,18 +467,34 @@ export class RunClient implements RunHandle {
    * Emit a typed `handoff` node marking delegation to another agent. Dashboards
    * render these as boundaries between swimlane rows.
    */
-  async handoff(opts: HandoffOptions): Promise<void> {
+  async handoff(opts: HandoffOptions): Promise<HandoffToken | null> {
+    const issuerAgentId = opts.fromAgentId ?? this.run.agent_id;
     await this.step(
       'handoff',
       {
         type: 'handoff',
         input: opts.message !== undefined ? { message: opts.message } : undefined,
-        handoffFrom: opts.fromAgentId ?? this.run.agent_id,
+        handoffFrom: issuerAgentId,
         handoffTo: opts.toAgentId,
         handoffReason: opts.reason,
       },
       async () => {},
     );
+    if (!this.signingKey || this.lastHash == null || this.lastNodeId == null) {
+      return null;
+    }
+    // Server lookup of handoff_node_id happens on receiver's runs.create, so we
+    // must have flushed the handoff node first.
+    await this.flush();
+    return buildHandoffToken({
+      iss_agent_id: issuerAgentId,
+      iss_run_id: this.run.id,
+      handoff_node_id: this.lastNodeId,
+      handoff_node_hash: this.lastHash,
+      to_agent_id: opts.toAgentId,
+      signing_key: this.signingKey,
+      iat_ms: Date.now(),
+    });
   }
 
   async signal(input: EmitSignalInput): Promise<Signal> {
@@ -541,6 +573,7 @@ export class RunsResource {
       metadata: opts.metadata,
     };
     if (opts.replaySeed !== undefined) body.replay_seed = opts.replaySeed;
+    if (opts.parentHandoffToken !== undefined) body.parent_handoff_token = opts.parentHandoffToken;
     const res = await this.http.post<{ run: Run }>('/v1/runs', body);
     const client = new RunClient(
       this.http,
