@@ -16,6 +16,8 @@ describe('compileMonitor → backend CreateMonitorRequest', () => {
       evaluator: { type: 'keyword', field: 'output', keywords: ['ssn'], case_sensitive: false },
       severity: 'high',
       signal_type: 'pii',
+      scope: 'node',
+      target: { kind: 'agent_history', filters: [{ field: 'action_type', operator: 'eq', value: 'tool.use' }] },
     });
   });
 
@@ -50,12 +52,26 @@ describe('compileMonitor → backend CreateMonitorRequest', () => {
     });
   });
 
-  it('create_finding sets creates_review', () => {
+  it('create_finding does not imply review creation', () => {
     const body = compileMonitor({
       name: 'x',
       on: on.node({}),
       when: rule.fieldContains('output', 'bad'),
       do: action.createFinding({ severity: 'critical', title: 'Bad', type: 'bad' }),
+    });
+    expect(body.creates_review).toBeUndefined();
+    expect(body.signal_type).toBe('bad');
+  });
+
+  it('create_review sets creates_review', () => {
+    const body = compileMonitor({
+      name: 'x',
+      on: on.node({}),
+      when: rule.fieldContains('output', 'bad'),
+      do: [
+        action.emitSignal({ severity: 'critical', title: 'Bad', type: 'bad' }),
+        action.createReview(),
+      ],
     });
     expect(body.creates_review).toBe(true);
     expect(body.signal_type).toBe('bad');

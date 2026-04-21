@@ -8,6 +8,12 @@ import { pagePath, type PageOptions } from './query.js';
 // ── Public spec (what the user writes) ─────────────────────────────────────
 
 export type Severity = 'info' | 'low' | 'medium' | 'high' | 'critical';
+export type MonitorScope = 'node' | 'session' | 'run' | 'agent' | 'batch';
+export type MonitorFilter = { field: string; operator: 'eq'; value: string | number | boolean };
+export type MonitorTarget =
+  | { kind: 'current_run' }
+  | { kind: 'specific_run'; run_id: string }
+  | { kind: 'agent_history'; filters?: MonitorFilter[] };
 
 export type On =
   | { session: { id?: string; tags?: string[] } }
@@ -25,7 +31,8 @@ export type Rule =
 
 export type Action =
   | { kind: 'create_finding'; severity: Severity; title: string; message?: string; type?: string }
-  | { kind: 'emit_signal'; severity: Severity; title: string; message?: string; type?: string };
+  | { kind: 'emit_signal'; severity: Severity; title: string; message?: string; type?: string }
+  | { kind: 'create_review' };
 
 export interface MonitorSpec {
   name: string;
@@ -56,6 +63,8 @@ export interface CreateMonitorRequest {
   schedule?: MonitorSchedule;
   creates_review?: boolean;
   signal_type?: string | null;
+  scope?: MonitorScope;
+  target?: MonitorTarget;
 }
 
 export interface UpdateMonitorRequest {
@@ -66,6 +75,8 @@ export interface UpdateMonitorRequest {
   schedule?: MonitorSchedule;
   creates_review?: boolean;
   signal_type?: string | null;
+  scope?: MonitorScope | null;
+  target?: MonitorTarget | null;
 }
 
 export interface EvaluateMonitorRequest {
@@ -85,6 +96,8 @@ export interface Monitor {
   schedule: MonitorSchedule;
   creates_review: boolean;
   signal_type: string | null;
+  scope?: MonitorScope | null;
+  target?: MonitorTarget | null;
   last_run_at: string | null;
   next_run_at: string | null;
   created_at: string;
@@ -112,6 +125,7 @@ export interface EvaluateMonitorResponse {
 // ── Builders (ergonomic factories) ─────────────────────────────────────────
 
 export const on = {
+  // Legacy alias retained for older callers; new code should prefer `on.run(...)`.
   session: (match: { id?: string; tags?: string[] } = {}): On => ({ session: match }),
   run: (match: { id?: string; agent_id?: string } = {}): On => ({ run: match }),
   agent: (id: string): On => ({ agent: { id } }),
@@ -128,6 +142,7 @@ export const rule = {
 export const action = {
   createFinding: (opts: { severity: Severity; title: string; message?: string; type?: string }): Action => ({ kind: 'create_finding', ...opts }),
   emitSignal: (opts: { severity: Severity; title: string; message?: string; type?: string }): Action => ({ kind: 'emit_signal', ...opts }),
+  createReview: (): Action => ({ kind: 'create_review' }),
 };
 
 // ── Compilation: MonitorSpec → backend CreateMonitorRequest ────────────────
@@ -152,12 +167,46 @@ function compileRuleToEvaluator(r: Rule): MonitorEvaluator {
   }
 }
 
+function compileOnToScopeTarget(spec: On): Pick<CreateMonitorRequest, 'scope' | 'target'> {
+  if ('session' in spec) {
+    return spec.session.id
+      ? { scope: 'run', target: { kind: 'specific_run', run_id: spec.session.id } }
+      : { scope: 'run', target: { kind: 'current_run' } };
+  }
+  if ('run' in spec) {
+    return spec.run.id
+      ? { scope: 'run', target: { kind: 'specific_run', run_id: spec.run.id } }
+      : { scope: 'run', target: { kind: 'current_run' } };
+  }
+  if ('agent' in spec) {
+    return {
+      scope: 'agent',
+      target: {
+        kind: 'agent_history',
+        filters: [{ field: 'agent_id', operator: 'eq', value: spec.agent.id }],
+      },
+    };
+  }
+  if ('node' in spec) {
+    const filters: MonitorFilter[] = [];
+    if (spec.node.type) filters.push({ field: 'type', operator: 'eq', value: spec.node.type });
+    if (spec.node.action_type) filters.push({ field: 'action_type', operator: 'eq', value: spec.node.action_type });
+    if (spec.node.agent_id) filters.push({ field: 'agent_id', operator: 'eq', value: spec.node.agent_id });
+    return {
+      scope: 'node',
+      target: filters.length > 0 ? { kind: 'agent_history', filters } : undefined,
+    };
+  }
+  return { scope: 'batch' };
+}
+
 export function compileMonitor(spec: MonitorSpec): CreateMonitorRequest {
   const evaluatorBody = compileRuleToEvaluator(spec.when);
+  const { scope, target } = compileOnToScopeTarget(spec.on);
 
   const actions = Array.isArray(spec.do) ? spec.do : [spec.do];
   const signalAction = actions.find((a) => a.kind === 'emit_signal' || a.kind === 'create_finding');
-  const createsReview = actions.some((a) => a.kind === 'create_finding');
+  const createsReview = actions.some((a) => a.kind === 'create_review');
 
   const body: CreateMonitorRequest = {
     name: spec.name,
@@ -166,6 +215,8 @@ export function compileMonitor(spec: MonitorSpec): CreateMonitorRequest {
   };
   if (spec.description !== undefined) body.description = spec.description;
   if (signalAction?.type) body.signal_type = signalAction.type;
+  if (scope) body.scope = scope;
+  if (target) body.target = target;
   if (createsReview) body.creates_review = true;
   return body;
 }
