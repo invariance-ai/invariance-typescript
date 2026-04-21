@@ -26,7 +26,9 @@ export {
   type StartRunOptions,
   type StepOptions,
   type WriteNodeOptions,
+  type HandoffOptions,
 } from './resources/runs.js';
+export { HandoffToken, buildHandoffToken, type HandoffTokenClaims } from './handoff-token.js';
 export { NodesResource, type WriteNodeInput } from './resources/nodes.js';
 export {
   AgentsResource,
