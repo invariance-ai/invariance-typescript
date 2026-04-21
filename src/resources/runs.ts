@@ -15,6 +15,18 @@ export interface Run {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  parent_run_id?: string | null;
+  fork_point_node_id?: string | null;
+  replay_seed?: string | null;
+  total_input_tokens?: number;
+  total_output_tokens?: number;
+  total_cache_read?: number;
+  total_cache_write?: number;
+  total_cost_usd?: number;
+  llm_call_count?: number;
+  tool_call_count?: number;
+  error_count?: number;
+  total_latency_ms?: number;
 }
 
 export interface Node {
@@ -35,6 +47,9 @@ export interface Node {
   previous_hashes: string[];
   signature: string | null;
   created_at: string;
+  handoff_from?: string | null;
+  handoff_to?: string | null;
+  handoff_reason?: string | null;
 }
 
 export type RunProofReason = 'linkage' | 'hash' | 'signature' | 'missing_key';

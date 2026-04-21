@@ -128,7 +128,7 @@ type SimpleMonitorBody = {
 };
 ```
 
-SDK `review: true` maps to backend `creates_review: true`.
+SDK review creation maps to backend `creates_review: true`.
 
 No `on_completion`, `on_error`, regex, LLM judge, or code monitor in the MVP.
 
