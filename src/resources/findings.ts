@@ -1,6 +1,7 @@
 import type { HttpClient } from '../client.js';
 import type { ListResponse } from './runs.js';
 import type { Severity } from './monitors.js';
+import { pagePath, type PageOptions } from './query.js';
 
 export type FindingStatus = 'open' | 'review_requested' | 'resolved' | 'dismissed';
 
@@ -22,12 +23,8 @@ export interface Finding {
 export class FindingsResource {
   constructor(private readonly http: HttpClient) {}
 
-  list(opts: { cursor?: string; limit?: number } = {}): Promise<ListResponse<Finding>> {
-    const params = new URLSearchParams();
-    if (opts.cursor) params.set('cursor', opts.cursor);
-    if (opts.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    return this.http.get<ListResponse<Finding>>(`/v1/findings${qs ? `?${qs}` : ''}`);
+  list(opts: PageOptions = {}): Promise<ListResponse<Finding>> {
+    return this.http.get<ListResponse<Finding>>(pagePath('/v1/findings', opts));
   }
 
   async get(id: string): Promise<Finding> {

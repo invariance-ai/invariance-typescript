@@ -1,6 +1,7 @@
 import type { HttpClient } from '../client.js';
 import type { ListResponse } from './runs.js';
 import type { Finding } from './findings.js';
+import { pagePath, type PageOptions } from './query.js';
 
 export type ReviewDecision = 'passed' | 'failed' | 'needs_fix';
 
@@ -25,12 +26,8 @@ export interface ReviewResolveResponse {
 export class ReviewsResource {
   constructor(private readonly http: HttpClient) {}
 
-  list(opts: { cursor?: string; limit?: number } = {}): Promise<ListResponse<Review>> {
-    const params = new URLSearchParams();
-    if (opts.cursor) params.set('cursor', opts.cursor);
-    if (opts.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    return this.http.get<ListResponse<Review>>(`/v1/reviews${qs ? `?${qs}` : ''}`);
+  list(opts: PageOptions = {}): Promise<ListResponse<Review>> {
+    return this.http.get<ListResponse<Review>>(pagePath('/v1/reviews', opts));
   }
 
   async get(id: string): Promise<Review> {

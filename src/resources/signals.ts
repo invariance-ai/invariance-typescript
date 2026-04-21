@@ -1,6 +1,7 @@
 import type { HttpClient } from '../client.js';
 import type { ListResponse } from './runs.js';
 import type { Severity } from './monitors.js';
+import { pagePath, type PageOptions } from './query.js';
 
 export interface Signal {
   id: string;
@@ -52,14 +53,8 @@ export class SignalsResource {
     return res.signal;
   }
 
-  async list(opts?: { cursor?: string; limit?: number }): Promise<ListResponse<Signal>> {
-    let path = '/v1/signals';
-    const params = new URLSearchParams();
-    if (opts?.cursor) params.set('cursor', opts.cursor);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    if (qs) path += `?${qs}`;
-    return this.http.get<ListResponse<Signal>>(path);
+  async list(opts: PageOptions = {}): Promise<ListResponse<Signal>> {
+    return this.http.get<ListResponse<Signal>>(pagePath('/v1/signals', opts));
   }
 
   async get(id: string): Promise<Signal> {

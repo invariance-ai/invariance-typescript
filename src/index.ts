@@ -8,6 +8,7 @@ import { SignalsResource } from './resources/signals.js';
 import { ProofsResource } from './resources/proofs.js';
 import { FindingsResource } from './resources/findings.js';
 import { ReviewsResource } from './resources/reviews.js';
+import { NarrativesResource } from './resources/narratives.js';
 
 export { InvarianceApiError } from './client.js';
 export { DEFAULT_API_URL, resolveConfig, type InvarianceConfig, type Features, type ResolvedConfig } from './config.js';
@@ -69,6 +70,13 @@ export {
   type ReviewDecision,
   type ReviewResolveResponse,
 } from './resources/reviews.js';
+export {
+  NarrativesResource,
+  type Narrative,
+  type NarrativeProvider,
+  type NarrativeScorer,
+  type GetNarrativeOptions,
+} from './resources/narratives.js';
 export { trace } from './resources/trace.js';
 export {
   generateKeypair,
@@ -92,6 +100,7 @@ export class Invariance {
   readonly findings: FindingsResource;
   readonly reviews: ReviewsResource;
   readonly features: import('./config.js').Features;
+  readonly narratives: NarrativesResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -107,6 +116,7 @@ export class Invariance {
     this.proofs = new ProofsResource(http);
     this.findings = new FindingsResource(http);
     this.reviews = new ReviewsResource(http);
+    this.narratives = new NarrativesResource(http);
   }
 
   static init(config: InvarianceConfig = {}): Invariance {

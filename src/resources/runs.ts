@@ -4,6 +4,7 @@ import type { Features } from '../config.js';
 import { hashNodePayload, signEd25519, type NodeHashPayload } from '../crypto.js';
 import { buildHandoffToken, HandoffToken } from '../handoff-token.js';
 import { SignalsResource, type EmitSignalInput, type Signal } from './signals.js';
+import { pagePath, type PageOptions } from './query.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -607,14 +608,8 @@ export class RunsResource {
     return new RunClient(this.http, res.run, this.defaultSigningKey, true);
   }
 
-  async list(opts?: { cursor?: string; limit?: number }): Promise<ListResponse<Run>> {
-    let path = '/v1/runs';
-    const params = new URLSearchParams();
-    if (opts?.cursor) params.set('cursor', opts.cursor);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    if (qs) path += `?${qs}`;
-    return this.http.get<ListResponse<Run>>(path);
+  async list(opts: PageOptions = {}): Promise<ListResponse<Run>> {
+    return this.http.get<ListResponse<Run>>(pagePath('/v1/runs', opts));
   }
 
   async get(id: string): Promise<RunClient> {

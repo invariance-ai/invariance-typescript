@@ -19,6 +19,21 @@ describe('compileMonitor → backend CreateMonitorRequest', () => {
     });
   });
 
+  it('field_contains stringifies non-string values', () => {
+    const body = compileMonitor({
+      name: 'flag-count',
+      on: on.node({ action_type: 'tool.use' }),
+      when: rule.fieldContains('custom_fields.count', 7),
+      do: action.emitSignal({ severity: 'low', title: 'Count' }),
+    });
+    expect(body.evaluator).toEqual({
+      type: 'keyword',
+      field: 'custom_fields.count',
+      keywords: ['7'],
+      case_sensitive: false,
+    });
+  });
+
   it('numeric compiles to threshold evaluator', () => {
     const BillingCharge = defineNodeType<{ amount_cents: number }>('billing_charge');
     const body = compileMonitor({

@@ -1,5 +1,6 @@
 import type { HttpClient } from '../client.js';
 import type { ListResponse } from './runs.js';
+import { withQuery } from './query.js';
 
 export interface Agent {
   id: string;
@@ -60,8 +61,7 @@ export class AgentsResource {
   }
 
   async list(opts: { project_id: string }): Promise<ListResponse<Agent>> {
-    const qs = new URLSearchParams({ project_id: opts.project_id }).toString();
-    return this.http.get<ListResponse<Agent>>(`/v1/agents?${qs}`);
+    return this.http.get<ListResponse<Agent>>(withQuery('/v1/agents', opts));
   }
 
   async get(id: string): Promise<Agent> {
