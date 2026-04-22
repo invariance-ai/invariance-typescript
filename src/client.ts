@@ -20,36 +20,118 @@ export class InvarianceApiError extends Error {
   }
 }
 
+/** Raised when the server returned 429 and retries are exhausted. */
+export class RateLimitError extends InvarianceApiError {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: unknown,
+    requestId?: string,
+  ) {
+    super(status, code, message, details, requestId);
+    this.name = 'RateLimitError';
+  }
+}
+
+export interface RetryPolicy {
+  maxRetries: number;
+  baseSeconds: number;
+  factor: number;
+  maxSeconds: number;
+  /** ± fraction of the computed delay. */
+  jitter: number;
+}
+
+export const DEFAULT_RETRY_POLICY: RetryPolicy = {
+  maxRetries: 3,
+  baseSeconds: 0.5,
+  factor: 2,
+  maxSeconds: 30,
+  jitter: 0.25,
+};
+
+function shouldRetry(status: number): boolean {
+  return status === 429 || (status >= 500 && status < 600);
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const n = Number(value.trim());
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+function backoffDelay(policy: RetryPolicy, attempt: number, retryAfter: number | null): number {
+  if (retryAfter !== null) return Math.min(retryAfter, policy.maxSeconds);
+  const base = Math.min(policy.maxSeconds, policy.baseSeconds * policy.factor ** (attempt - 1));
+  const jitterRange = base * policy.jitter;
+  const delta = (Math.random() * 2 - 1) * jitterRange;
+  return Math.max(0, base + delta);
+}
+
+function sleep(seconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, Math.ceil(seconds * 1000));
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export interface HttpClientOptions {
+  retryPolicy?: Partial<RetryPolicy>;
+  signal?: AbortSignal;
+}
+
 export class HttpClient {
+  private readonly retry: RetryPolicy;
+
   constructor(
     private readonly baseUrl: string,
     private readonly apiKey: string,
-  ) {}
+    options: HttpClientOptions = {},
+  ) {
+    this.retry = { ...DEFAULT_RETRY_POLICY, ...options.retryPolicy };
+  }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const headers: Record<string, string> = {
-      'Authorization': `Bearer ${this.apiKey}`,
+      Authorization: `Bearer ${this.apiKey}`,
     };
-    if (body !== undefined) {
-      headers['Content-Type'] = 'application/json';
-    }
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
 
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    let res!: Response;
+    let lastStatus = 0;
+    for (let attempt = 0; attempt <= this.retry.maxRetries; attempt++) {
+      res = await fetch(url, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      if (res.ok || !shouldRetry(res.status)) break;
+      lastStatus = res.status;
+      if (attempt >= this.retry.maxRetries) break;
+      const retryAfter = parseRetryAfter(res.headers.get('Retry-After'));
+      await sleep(backoffDelay(this.retry, attempt + 1, retryAfter));
+    }
 
     if (!res.ok) {
       let parsed: ApiErrorBody | undefined;
       try {
-        parsed = await res.json() as ApiErrorBody;
+        parsed = (await res.json()) as ApiErrorBody;
       } catch {
         // Error response body isn't JSON — fall through with `unknown` defaults.
       }
-
-      throw new InvarianceApiError(
+      const ErrCls = lastStatus === 429 ? RateLimitError : InvarianceApiError;
+      throw new ErrCls(
         res.status,
         parsed?.error?.code ?? 'unknown',
         parsed?.error?.message ?? `HTTP ${res.status}`,

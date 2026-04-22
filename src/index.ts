@@ -10,7 +10,8 @@ import { FindingsResource } from './resources/findings.js';
 import { ReviewsResource } from './resources/reviews.js';
 import { NarrativesResource } from './resources/narratives.js';
 
-export { InvarianceApiError } from './client.js';
+export { InvarianceApiError, RateLimitError } from './client.js';
+export type { RetryPolicy, HttpClientOptions } from './client.js';
 export { DEFAULT_API_URL, resolveConfig, type InvarianceConfig, type Features, type ResolvedConfig } from './config.js';
 export { withReproducibility, type ReproducibilityOptions } from './replay.js';
 export { instrumentOpenAI, instrumentAnthropic, priceCall, registerPricing, type PricingEntry } from './providers/index.js';
@@ -121,9 +122,12 @@ export class Invariance {
     this.narratives = new NarrativesResource(http);
   }
 
-  static init(config: InvarianceConfig = {}): Invariance {
+  static init(
+    config: InvarianceConfig = {},
+    options: import('./client.js').HttpClientOptions = {},
+  ): Invariance {
     const resolved = resolveConfig(config);
-    const http = new HttpClient(resolved.apiUrl, resolved.apiKey);
+    const http = new HttpClient(resolved.apiUrl, resolved.apiKey, options);
     return new Invariance(http, resolved.signingKey, resolved.features);
   }
 }
