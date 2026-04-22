@@ -93,4 +93,18 @@ describe('HttpClient retry', () => {
     expect(result).toEqual({ ok: 1 });
     expect(calls).toHaveLength(2);
   });
+
+  it('passes the configured abort signal through fetch', async () => {
+    const controller = new AbortController();
+    const calls = stubFetch([() => new Response(JSON.stringify({ ok: true }), { status: 200 })]);
+    const c = new HttpClient('http://x', 'k', {
+      signal: controller.signal,
+      retryPolicy: { maxRetries: 0, baseSeconds: 0, jitter: 0 },
+    });
+
+    await c.get('/thing');
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.init?.signal).toBe(controller.signal);
+  });
 });

@@ -92,6 +92,7 @@ export interface HttpClientOptions {
 
 export class HttpClient {
   private readonly retry: RetryPolicy;
+  private readonly signal?: AbortSignal;
 
   constructor(
     private readonly baseUrl: string,
@@ -99,6 +100,7 @@ export class HttpClient {
     options: HttpClientOptions = {},
   ) {
     this.retry = { ...DEFAULT_RETRY_POLICY, ...options.retryPolicy };
+    this.signal = options.signal;
   }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -115,12 +117,13 @@ export class HttpClient {
         method,
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: this.signal,
       });
       if (res.ok || !shouldRetry(res.status)) break;
       lastStatus = res.status;
       if (attempt >= this.retry.maxRetries) break;
       const retryAfter = parseRetryAfter(res.headers.get('Retry-After'));
-      await sleep(backoffDelay(this.retry, attempt + 1, retryAfter));
+      await sleep(backoffDelay(this.retry, attempt + 1, retryAfter), this.signal);
     }
 
     if (!res.ok) {
