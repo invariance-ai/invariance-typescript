@@ -9,6 +9,7 @@ import { ProofsResource } from './resources/proofs.js';
 import { FindingsResource } from './resources/findings.js';
 import { ReviewsResource } from './resources/reviews.js';
 import { NarrativesResource } from './resources/narratives.js';
+import { NodeTypesResource } from './resources/node-types.js';
 
 export { InvarianceApiError } from './client.js';
 export { DEFAULT_API_URL, resolveConfig, type InvarianceConfig, type Features, type ResolvedConfig } from './config.js';
@@ -37,7 +38,17 @@ export {
   type CreateAgentInput,
   type CreateAgentResponse,
 } from './resources/agents.js';
-export { defineNodeType, type NodeType } from './resources/node-types.js';
+export {
+  defineNodeType,
+  defineToolCallType,
+  NodeTypesResource,
+  type NodeType,
+  type NodeTypeRecord,
+  type NodeTypeSchema,
+  type NodeTypeAggregationHints,
+  type RegisterNodeTypeInput,
+  type ToolCallFields,
+} from './resources/node-types.js';
 export { SignalsResource, type Signal, type EmitSignalInput } from './resources/signals.js';
 export { defineSignalType, type SignalType, type SignalTypeDefaults } from './resources/signal-types.js';
 export {
@@ -101,6 +112,7 @@ export class Invariance {
   readonly reviews: ReviewsResource;
   readonly features: import('./config.js').Features;
   readonly narratives: NarrativesResource;
+  readonly nodeTypes: NodeTypesResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -117,6 +129,7 @@ export class Invariance {
     this.findings = new FindingsResource(http);
     this.reviews = new ReviewsResource(http);
     this.narratives = new NarrativesResource(http);
+    this.nodeTypes = new NodeTypesResource(http);
   }
 
   static init(config: InvarianceConfig = {}): Invariance {
