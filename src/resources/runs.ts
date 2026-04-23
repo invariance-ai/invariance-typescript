@@ -100,6 +100,26 @@ export interface StepOptions {
   handoffReason?: string;
 }
 
+export interface LogOptions {
+  metadata?: Record<string, unknown>;
+  custom_fields?: Record<string, unknown>;
+  /** Declared custom node type (see defineNodeType). */
+  type?: string;
+}
+
+export interface ContextOptions {
+  metadata?: Record<string, unknown>;
+  custom_fields?: Record<string, unknown>;
+  type?: string;
+}
+
+export interface ToolOptions {
+  output?: unknown;
+  error?: unknown;
+  metadata?: Record<string, unknown>;
+  custom_fields?: Record<string, unknown>;
+}
+
 export interface HandoffOptions {
   toAgentId: string;
   fromAgentId?: string;
@@ -295,6 +315,113 @@ export class RunClient implements RunHandle {
         await step.close();
       }
     }
+  }
+
+  // ── Ergonomic helpers ────────────────────────────────────────────
+
+  /**
+   * Append-only breadcrumb for human-legible events (prompts, decisions,
+   * checkpoints). Emits a node with ``action_type: "log"``; ``data`` is stored
+   * as structured input alongside ``message``.
+   */
+  async log(message: string, data?: unknown, opts: LogOptions = {}): Promise<void> {
+    const input: Record<string, unknown> = { message };
+    if (data !== undefined) input.data = data;
+    await this.step(
+      'log',
+      {
+        type: opts.type,
+        input,
+        metadata: opts.metadata,
+        custom_fields: opts.custom_fields,
+      },
+      async () => {},
+    );
+  }
+
+  /**
+   * Attach structured state to the run (e.g. user id, workspace, risk tier).
+   * Stored as the node's ``input`` so it stays searchable without overloading
+   * ``metadata``.
+   */
+  async context(
+    data: Record<string, unknown>,
+    opts: ContextOptions = {},
+  ): Promise<void> {
+    await this.step(
+      'context',
+      {
+        type: opts.type,
+        input: data,
+        metadata: opts.metadata,
+        custom_fields: opts.custom_fields,
+      },
+      async () => {},
+    );
+  }
+
+  /**
+   * Record a tool invocation. In callback form, captures output, duration, and
+   * thrown errors automatically. In direct form, accepts explicit output for
+   * already-computed work. Emits with ``action_type: "tool_call"`` and
+   * ``type: "tool_call"`` so dashboards treat it as the built-in typed node.
+   */
+  async tool<T>(name: string, input: unknown, fn: () => Promise<T>): Promise<T>;
+  async tool(name: string, input: unknown, opts: ToolOptions): Promise<void>;
+  async tool<T>(
+    name: string,
+    input: unknown,
+    arg: (() => Promise<T>) | ToolOptions,
+  ): Promise<T | void> {
+    if (typeof arg === 'function') {
+      return this.step(
+        'tool_call',
+        {
+          type: 'tool_call',
+          input,
+          custom_fields: { tool_name: name, status: 'success', tool_input: input },
+        },
+        async (s) => {
+          try {
+            const out = await arg();
+            s.output = out;
+            s.custom_fields = {
+              ...(s.custom_fields ?? {}),
+              tool_output: out,
+            };
+            return out;
+          } catch (err) {
+            s.custom_fields = {
+              ...(s.custom_fields ?? {}),
+              status: 'error',
+            };
+            throw err;
+          }
+        },
+      );
+    }
+    const opts = arg;
+    const status = opts.error !== undefined ? 'error' : 'success';
+    const custom_fields: Record<string, unknown> = {
+      tool_name: name,
+      status,
+      tool_input: input,
+      ...(opts.custom_fields ?? {}),
+    };
+    if (opts.output !== undefined) custom_fields.tool_output = opts.output;
+    await this.step(
+      'tool_call',
+      {
+        type: 'tool_call',
+        input,
+        output: opts.output,
+        metadata: opts.metadata,
+        custom_fields,
+      },
+      async (s) => {
+        if (opts.error !== undefined) s.error = opts.error;
+      },
+    );
   }
 
   private serializeError(err: unknown): Record<string, unknown> {
