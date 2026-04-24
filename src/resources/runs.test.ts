@@ -128,6 +128,119 @@ describe('trace helper', () => {
   });
 });
 
+describe('run.log / run.context / run.tool helpers', () => {
+  it('run.log emits a node with action_type=log and structured input', async () => {
+    const { inv, calls } = stubbedInvariance();
+    await inv.runs.start({}, async (run) => {
+      await run.log('decision context', { orderId: 'o_1', policy: 'refund-30d' });
+    });
+    const nodes = calls
+      .filter((c) => c.path === '/v1/nodes')
+      .flatMap((c) => (Array.isArray(c.body) ? c.body : [c.body])) as Array<Record<string, unknown>>;
+    const log = nodes.find((n) => n.action_type === 'log')!;
+    expect(log).toBeDefined();
+    expect(log.input).toEqual({ message: 'decision context', data: { orderId: 'o_1', policy: 'refund-30d' } });
+  });
+
+  it('run.log without data still emits the message', async () => {
+    const { inv, calls } = stubbedInvariance();
+    await inv.runs.start({}, async (run) => {
+      await run.log('plain breadcrumb');
+    });
+    const nodes = calls
+      .filter((c) => c.path === '/v1/nodes')
+      .flatMap((c) => (Array.isArray(c.body) ? c.body : [c.body])) as Array<Record<string, unknown>>;
+    const log = nodes.find((n) => n.action_type === 'log')!;
+    expect(log.input).toEqual({ message: 'plain breadcrumb' });
+  });
+
+  it('run.context preserves structured data as input', async () => {
+    const { inv, calls } = stubbedInvariance();
+    await inv.runs.start({}, async (run) => {
+      await run.context({ userId: 'u_1', riskTier: 'medium' });
+    });
+    const nodes = calls
+      .filter((c) => c.path === '/v1/nodes')
+      .flatMap((c) => (Array.isArray(c.body) ? c.body : [c.body])) as Array<Record<string, unknown>>;
+    const ctx = nodes.find((n) => n.action_type === 'context')!;
+    expect(ctx.input).toEqual({ userId: 'u_1', riskTier: 'medium' });
+  });
+
+  it('run.tool callback form captures output and duration', async () => {
+    const { inv, calls } = stubbedInvariance();
+    await inv.runs.start({}, async (run) => {
+      const out = await run.tool('policy_lookup', { orderId: 'o_1' }, async () => {
+        return { policy: 'refund-30d' };
+      });
+      expect(out).toEqual({ policy: 'refund-30d' });
+    });
+    const nodes = calls
+      .filter((c) => c.path === '/v1/nodes')
+      .flatMap((c) => (Array.isArray(c.body) ? c.body : [c.body])) as Array<Record<string, unknown>>;
+    const tool = nodes.find((n) => n.action_type === 'tool_call')!;
+    expect(tool.type).toBe('tool_call');
+    expect(tool.input).toEqual({ orderId: 'o_1' });
+    expect(tool.output).toEqual({ policy: 'refund-30d' });
+    expect(typeof tool.duration_ms).toBe('number');
+    const cf = tool.custom_fields as Record<string, unknown>;
+    expect(cf.tool_name).toBe('policy_lookup');
+    expect(cf.status).toBe('success');
+    expect(cf.tool_output).toEqual({ policy: 'refund-30d' });
+  });
+
+  it('run.tool callback form captures thrown error and still closes the node', async () => {
+    const { inv, calls } = stubbedInvariance();
+    await expect(
+      inv.runs.start({}, async (run) => {
+        await run.tool('policy_lookup', { orderId: 'o_1' }, async () => {
+          throw new Error('lookup failed');
+        });
+      }),
+    ).rejects.toThrow('lookup failed');
+
+    const nodes = calls
+      .filter((c) => c.path === '/v1/nodes')
+      .flatMap((c) => (Array.isArray(c.body) ? c.body : [c.body])) as Array<Record<string, unknown>>;
+    const tool = nodes.find((n) => n.action_type === 'tool_call')!;
+    expect(tool).toBeDefined();
+    const err = tool.error as { type: string; message: string };
+    expect(err.message).toBe('lookup failed');
+    const cf = tool.custom_fields as Record<string, unknown>;
+    expect(cf.status).toBe('error');
+  });
+
+  it('run.tool direct form records explicit output', async () => {
+    const { inv, calls } = stubbedInvariance();
+    await inv.runs.start({}, async (run) => {
+      await run.tool('policy_lookup', { orderId: 'o_1' }, { output: { policy: 'refund-30d' } });
+    });
+    const nodes = calls
+      .filter((c) => c.path === '/v1/nodes')
+      .flatMap((c) => (Array.isArray(c.body) ? c.body : [c.body])) as Array<Record<string, unknown>>;
+    const tool = nodes.find((n) => n.action_type === 'tool_call')!;
+    expect(tool.output).toEqual({ policy: 'refund-30d' });
+    const cf = tool.custom_fields as Record<string, unknown>;
+    expect(cf.status).toBe('success');
+    expect(cf.tool_output).toEqual({ policy: 'refund-30d' });
+  });
+
+  it('nested run.tool inside run.step preserves parent_id', async () => {
+    const { inv, calls } = stubbedInvariance();
+    let outerId = '';
+    await inv.runs.start({}, async (run) => {
+      await run.step('outer', {}, async (outer) => {
+        outerId = outer.id;
+        await run.tool('inner_tool', { q: 1 }, async () => 'ok');
+      });
+    });
+    const nodes = calls
+      .filter((c) => c.path === '/v1/nodes')
+      .flatMap((c) => (Array.isArray(c.body) ? c.body : [c.body])) as Array<Record<string, unknown>>;
+    const tool = nodes.find((n) => n.action_type === 'tool_call')!;
+    expect(tool.parent_id).toBe(outerId);
+  });
+});
+
 describe('unbuffered mode', () => {
   it('POSTs per step rather than on close', async () => {
     const { inv, calls } = stubbedInvariance();
