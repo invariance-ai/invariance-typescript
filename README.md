@@ -1,43 +1,89 @@
 # Invariance TypeScript SDK
 
-Clean MVP TypeScript SDK.
+Official TypeScript SDK for the [Invariance AI](https://invariance.ai) platform. Start runs, emit nodes, verify proofs, and drive monitors/signals/reviews from any TypeScript or Node.js agent stack.
 
-This repository should expose only the customer loop:
+Part of the Invariance SDK family:
 
-- initialize client
-- start and finish a run
-- emit trace events
-- create and evaluate simple monitors
-- list signals
-- list, claim, and resolve reviews
+- [`@invariance/sdk`](./) — TypeScript SDK (this repo).
+- [`invariance-sdk` (Python)](../invariance-python) — Python SDK.
+- [`@invariance/cli`](../invariance-cli) — command-line interface.
 
-## Lifecycle
+## Install
 
-The SDK is run-first. Start a run, record work, finish the run.
+Published releases are on GitHub. Install from a tagged release:
+
+```bash
+npm install github:invariance-ai/invariance-typescript#v0.1.0
+# or
+pnpm add github:invariance-ai/invariance-typescript#v0.1.0
+```
+
+Requires Node.js >= 20.
+
+## Quickstart
 
 ```ts
 import { Invariance } from '@invariance/sdk';
 
-const inv = Invariance.init();
+const inv = Invariance.init({
+  apiKey: process.env.INVARIANCE_API_KEY!,
+});
 
 await inv.runs.start({ name: 'refund-flow' }, async (run) => {
   await run.context({ userId, workspaceId, riskTier: 'medium' });
   await run.log('prompt received', { prompt: rawPrompt });
 
   const policy = await run.tool('policy_lookup', { orderId }, async () => {
-    return await lookupPolicy(orderId);
+    return lookupPolicy(orderId);
   });
 
   await run.log('decision', { reason: 'customer eligible', policy });
 });
 ```
 
-The callback form auto-finishes on success and marks the run failed on throw.
-`run.step(...)` remains available as the general primitive; `run.log`,
-`run.context`, and `run.tool` are thin helpers over it.
+The callback form auto-finishes the run on success and marks it failed on throw. `run.step(...)` is the general primitive; `run.log`, `run.context`, and `run.tool` are thin helpers that emit nodes over it.
 
-Legacy SDK reference:
+## Lifecycle
 
-```text
-../_archive/invariance-sdk-legacy/packages/typescript
+The SDK is run-first:
+
+1. Initialize the client.
+2. Start a run.
+3. Record work as **nodes** (the atomic unit written to `/v1/trace/events`).
+4. Finish the run.
+5. Optionally verify the proof chain with `run.verify()`.
+
+## API surface
+
+| Resource | Purpose |
+| --- | --- |
+| `inv.runs` | Start, list, inspect, verify runs. |
+| `inv.nodes` | Write nodes (trace events) and list them by run. |
+| `inv.monitors` | Create, update, and evaluate simple monitors. |
+| `inv.signals` | List and acknowledge monitor-emitted signals. |
+| `inv.findings` | Investigation records produced from signals. |
+| `inv.reviews` | Claim, unclaim, and resolve reviews. |
+| `inv.agents` | Identity + key registration. |
+| `inv.proofs` | Proof chain verification. |
+| `inv.narratives` | LLM-generated run summaries. |
+
+## Configuration
+
+Resolved in priority order:
+
+1. Explicit `Invariance.init({ apiKey, apiUrl })` options.
+2. Env vars: `INVARIANCE_API_KEY`, `INVARIANCE_API_URL`.
+3. Built-in defaults (`DEFAULT_API_URL`).
+
+## Development
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm test
+pnpm build
 ```
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
