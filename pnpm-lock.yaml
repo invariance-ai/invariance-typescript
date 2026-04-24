@@ -17,9 +17,6 @@ importers:
       '@noble/hashes':
         specifier: ^1.5.0
         version: 1.8.0
-      commander:
-        specifier: ^13.1.0
-        version: 13.1.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -419,10 +416,6 @@ packages:
   check-error@2.1.3:
     resolution: {integrity: sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA==}
     engines: {node: '>= 16'}
-
-  commander@13.1.0:
-    resolution: {integrity: sha512-/rFeCpNJQbhSZjGVwO9RFV3xPqbnERS8MmIQzCtD/zl6gpJuV/bMLuN92oG3F7d8oDEHHRrujSXNUr8fpjntKw==}
-    engines: {node: '>=18'}
 
   content-disposition@1.1.0:
     resolution: {integrity: sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g==}
@@ -1181,8 +1174,6 @@ snapshots:
       pathval: 2.0.1
 
   check-error@2.1.3: {}
-
-  commander@13.1.0: {}
 
   content-disposition@1.1.0: {}
 

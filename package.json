@@ -1,7 +1,7 @@
 {
   "name": "@invariance/sdk",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.2",
+  "description": "Official TypeScript SDK for the Invariance AI platform.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,20 +11,43 @@
       "import": "./dist/index.js"
     }
   },
-  "bin": {
-    "invariance": "./dist/cli/bin.js"
-  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "keywords": [
+    "invariance",
+    "sdk",
+    "ai",
+    "monitoring",
+    "observability",
+    "mcp"
+  ],
+  "author": "Invariance AI <hello@invariance.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/invariance-ai/invariance-typescript.git"
+  },
+  "homepage": "https://github.com/invariance-ai/invariance-typescript#readme",
+  "bugs": {
+    "url": "https://github.com/invariance-ai/invariance-typescript/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@noble/ed25519": "^2.1.0",
     "@noble/hashes": "^1.5.0",
-    "commander": "^13.1.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
