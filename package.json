@@ -1,8 +1,7 @@
 {
   "name": "@invariance/sdk",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Official TypeScript SDK for the Invariance AI platform.",
-  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,7 +15,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -41,6 +40,9 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

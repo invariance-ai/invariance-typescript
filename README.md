@@ -10,12 +10,12 @@ Part of the Invariance SDK family:
 
 ## Install
 
-Published releases are on GitHub. Install from a tagged release:
+Published releases are on npm:
 
 ```bash
-npm install github:invariance-ai/invariance-typescript#v0.1.0
+npm install @invariance/sdk
 # or
-pnpm add github:invariance-ai/invariance-typescript#v0.1.0
+pnpm add @invariance/sdk
 ```
 
 Requires Node.js >= 20.

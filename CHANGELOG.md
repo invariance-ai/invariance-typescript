@@ -4,7 +4,7 @@ All notable changes to `@invariance/sdk` are documented here. This project adher
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-04-24
+## [0.1.2] - 2026-04-24
 
 Initial MVP release.
 
