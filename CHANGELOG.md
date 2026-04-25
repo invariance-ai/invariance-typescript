@@ -4,6 +4,15 @@ All notable changes to `@invariance/sdk` are documented here. This project adher
 
 ## [Unreleased]
 
+### Changed
+
+- MCP server now reads `version` from `package.json` at runtime (was hardcoded `'0.0.0'`).
+- `tsconfig.json` excludes `*.test.ts` from the build so test sources no longer ship in `dist/`.
+
+### Added
+
+- `prepublishOnly` script: `npm run build && npm test` to prevent shipping stale dist or broken builds.
+
 ## [0.1.2] - 2026-04-24
 
 Initial MVP release.
