@@ -47,34 +47,34 @@ async function main() {
     },
   });
 
-  const { id: runId } = await client.runs.create({ name: 'typed-nodes demo' });
+  const runId = await client.runs.start({ name: 'typed-nodes demo' }, async (run) => {
+    await client.nodes.write(run.id, [
+      ToolCall.node({
+        action_type: 'tool.use',
+        custom_fields: { tool_name: 'web_search', status: 'success', latency_ms: 142 },
+        duration_ms: 142,
+      }),
+      ToolCall.node({
+        action_type: 'tool.use',
+        custom_fields: { tool_name: 'code_exec', status: 'error', latency_ms: 31 },
+        duration_ms: 31,
+        error: { message: 'syntax error' },
+      }),
+      Retrieval.node({
+        action_type: 'retrieve',
+        custom_fields: {
+          retriever_name: 'docs_hybrid',
+          query: 'invariance observability',
+          k: 5,
+          hit_count: 5,
+          status: 'success',
+        },
+        duration_ms: 58,
+      }),
+    ]);
+    return run.id;
+  });
 
-  await client.nodes.write(runId, [
-    ToolCall.node({
-      action_type: 'tool.use',
-      custom_fields: { tool_name: 'web_search', status: 'success', latency_ms: 142 },
-      duration_ms: 142,
-    }),
-    ToolCall.node({
-      action_type: 'tool.use',
-      custom_fields: { tool_name: 'code_exec', status: 'error', latency_ms: 31 },
-      duration_ms: 31,
-      error: { message: 'syntax error' },
-    }),
-    Retrieval.node({
-      action_type: 'retrieve',
-      custom_fields: {
-        retriever_name: 'docs_hybrid',
-        query: 'invariance observability',
-        k: 5,
-        hit_count: 5,
-        status: 'success',
-      },
-      duration_ms: 58,
-    }),
-  ]);
-
-  await client.runs.update(runId, { status: 'completed' });
   console.log(`Run ${runId} done. Open the dashboard to see typed panels.`);
 }
 
