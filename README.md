@@ -66,6 +66,23 @@ The SDK is run-first:
 | `inv.agents` | Identity + key registration. |
 | `inv.proofs` | Proof chain verification. |
 | `inv.narratives` | LLM-generated run summaries. |
+| `inv.kb` | Knowledge base — `pages.{create,list,get,update,delete}`, `sessions.{create,list,get,delete,listMessages,appendMessage}`. |
+| `inv.ask` | Server-side agent loop with KB + run-context tools (`/v1/ask`). |
+
+### Intelligence: KB + Ask
+
+```ts
+const inv = Invariance.init({ apiKey: process.env.INVARIANCE_API_KEY! });
+
+await inv.kb.pages.create({
+  path: 'wiki:auth-flow',
+  title: 'Auth flow',
+  body: 'Tokens are minted on /v1/auth/cli-token …',
+});
+
+const reply = await inv.ask.send({ message: 'How does our auth flow work?' });
+console.log(reply.final_text); // cites [[wiki:auth-flow]] and [run:r_…]
+```
 
 ## Configuration
 

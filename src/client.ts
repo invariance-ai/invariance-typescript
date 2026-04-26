@@ -143,7 +143,9 @@ export class HttpClient {
       );
     }
 
-    return res.json() as Promise<T>;
+    if (res.status === 204) return undefined as T;
+    const text = await res.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   get<T>(path: string): Promise<T> {
@@ -156,5 +158,9 @@ export class HttpClient {
 
   patch<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('PATCH', path, body);
+  }
+
+  delete<T = void>(path: string): Promise<T> {
+    return this.request<T>('DELETE', path);
   }
 }
