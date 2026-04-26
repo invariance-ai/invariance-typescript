@@ -9,13 +9,20 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/server.d.ts",
+      "import": "./dist/mcp/server.js"
     }
+  },
+  "bin": {
+    "invariance-mcp": "./dist/mcp/bin.js"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc && node -e \"require('node:fs').chmodSync('dist/mcp/bin.js', 0o755)\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

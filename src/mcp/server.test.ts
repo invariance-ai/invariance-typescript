@@ -114,6 +114,32 @@ beforeEach(async () => {
     if (method === 'GET' && url.pathname === '/v1/runs/missing') {
       return jsonResponse({ error: { code: 'not_found', message: 'Run missing not found' } }, 404);
     }
+    if (method === 'POST' && url.pathname === '/v1/signals') {
+      return jsonResponse({
+        signal: {
+          id: 'sig_1',
+          agent_id: 'agent_1',
+          monitor_id: null,
+          monitor_execution_id: null,
+          run_id: body?.run_id ?? null,
+          node_id: null,
+          source: 'manual',
+          severity: body?.severity ?? 'medium',
+          title: body?.title ?? '',
+          message: body?.message ?? null,
+          status: 'open',
+          type: body?.type ?? null,
+          data: body?.data ?? null,
+          acknowledged_at: null,
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
+      }, 201);
+    }
+    if (method === 'GET' && url.pathname === '/v1/agents/me') {
+      return jsonResponse({
+        agent: { id: 'agent_1', name: 'me', public_key: null, project_id: 'p1', created_at: '2026-01-01T00:00:00.000Z' },
+      });
+    }
 
     return jsonResponse({ error: { code: 'not_found', message: `${method} ${url.pathname}` } }, 404);
   });
@@ -133,17 +159,37 @@ afterEach(async () => {
 });
 
 describe('MCP server tools', () => {
-  it('lists the MVP run, node, and proof tools', async () => {
+  it('lists every Invariance tool plus the legacy aliases', async () => {
     const result = await client.listTools();
+    const names = new Set(result.tools.map((tool) => tool.name));
 
-    expect(result.tools.map((tool) => tool.name).sort()).toEqual([
-      'invariance_create_run',
-      'invariance_get_run',
-      'invariance_list_nodes',
-      'invariance_list_runs',
-      'invariance_verify_run',
-      'invariance_write_node',
-    ]);
+    // Modern names — one per resource action.
+    for (const expected of [
+      'invariance_run_start', 'invariance_run_get', 'invariance_run_list',
+      'invariance_run_finish', 'invariance_run_fail', 'invariance_run_verify',
+      'invariance_node_write', 'invariance_node_list',
+      'invariance_monitor_create', 'invariance_monitor_list', 'invariance_monitor_get',
+      'invariance_monitor_update', 'invariance_monitor_pause', 'invariance_monitor_resume',
+      'invariance_monitor_evaluate', 'invariance_monitor_executions', 'invariance_monitor_findings',
+      'invariance_signal_emit', 'invariance_signal_list', 'invariance_signal_get',
+      'invariance_signal_acknowledge', 'invariance_signal_resolve',
+      'invariance_finding_list', 'invariance_finding_get', 'invariance_finding_update',
+      'invariance_review_list', 'invariance_review_get', 'invariance_review_claim',
+      'invariance_review_unclaim', 'invariance_review_resolve',
+      'invariance_agent_me', 'invariance_agent_set_key',
+      'invariance_narrative_get', 'invariance_ask',
+      'invariance_kb_pages_list', 'invariance_kb_page_get',
+    ]) {
+      expect(names.has(expected), `missing tool ${expected}`).toBe(true);
+    }
+
+    // Legacy aliases retained for backwards compatibility with existing MCP configs.
+    for (const legacy of [
+      'invariance_create_run', 'invariance_get_run', 'invariance_list_runs',
+      'invariance_write_node', 'invariance_list_nodes', 'invariance_verify_run',
+    ]) {
+      expect(names.has(legacy), `missing legacy alias ${legacy}`).toBe(true);
+    }
   });
 
   it('executes run, node, and proof tools through the SDK HTTP contract', async () => {
@@ -213,6 +259,37 @@ describe('MCP server tools', () => {
     expect(result.isError).toBe(true);
     expect(contentText(result)).toContain('Invalid JSON in "input"');
     expect(requests.some((request) => request.path === '/v1/nodes')).toBe(false);
+  });
+
+  it('emits a signal via the new resource-grouped tool', async () => {
+    const result = contentJson(await client.callTool({
+      name: 'invariance_signal_emit',
+      arguments: {
+        severity: 'high',
+        title: 'spike',
+        message: 'p99 latency over budget',
+        data: '{"p99_ms":2400}',
+        run_id: 'run_1',
+      },
+    })) as Record<string, unknown>;
+
+    expect(result).toMatchObject({ id: 'sig_1', severity: 'high', title: 'spike' });
+    const signalRequest = requests.find((r) => r.method === 'POST' && r.path === '/v1/signals');
+    expect(signalRequest?.body).toEqual({
+      severity: 'high',
+      title: 'spike',
+      message: 'p99 latency over budget',
+      data: { p99_ms: 2400 },
+      run_id: 'run_1',
+    });
+  });
+
+  it('returns the authenticated agent via invariance_agent_me', async () => {
+    const result = contentJson(await client.callTool({
+      name: 'invariance_agent_me',
+      arguments: {},
+    })) as { agent?: { id?: string } };
+    expect(result.agent?.id).toBe('agent_1');
   });
 
   it('returns API errors as MCP tool errors without leaking stack traces', async () => {

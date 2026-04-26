@@ -92,6 +92,31 @@ Resolved in priority order:
 2. Env vars: `INVARIANCE_API_KEY`, `INVARIANCE_API_URL`.
 3. Built-in defaults (`DEFAULT_API_URL`).
 
+## MCP server
+
+This package ships an MCP (Model Context Protocol) server that exposes 36 Invariance tools (runs, nodes, monitors, signals, findings, reviews, agents, narratives, ask, KB) over stdio. Any MCP-aware client (Claude Desktop, Claude Code, Cursor, Windsurf, …) can call them directly.
+
+Add to your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "invariance": {
+      "command": "npx",
+      "args": ["-y", "@invariance/sdk"],
+      "env": {
+        "INVARIANCE_API_KEY": "inv_live_…",
+        "INVARIANCE_API_URL": "https://api.useinvariance.com"
+      }
+    }
+  }
+}
+```
+
+Or run the bin directly: `INVARIANCE_API_KEY=… npx invariance-mcp`.
+
+Tool naming follows `invariance_<resource>_<action>` (e.g. `invariance_run_start`, `invariance_monitor_evaluate`, `invariance_signal_emit`). Six pre-1.0 names (`invariance_create_run`, `invariance_get_run`, `invariance_list_runs`, `invariance_write_node`, `invariance_list_nodes`, `invariance_verify_run`) are kept as aliases.
+
 ## Development
 
 ```bash

@@ -4,15 +4,18 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { Invariance } from '../index.js';
 import { DEFAULT_API_URL } from '../config.js';
+import { jsonResult, parseJsonArg } from './util.js';
+import { registerRunTools } from './tools/runs.js';
+import { registerNodeTools } from './tools/nodes.js';
+import { registerMonitorTools } from './tools/monitors.js';
+import { registerSignalTools } from './tools/signals.js';
+import { registerFindingTools } from './tools/findings.js';
+import { registerReviewTools } from './tools/reviews.js';
+import { registerAgentTools } from './tools/agents.js';
+import { registerInsightTools } from './tools/insights.js';
 
-function parseJsonArg(name: string, value: string | undefined): unknown {
-  if (value === undefined) return undefined;
-  try {
-    return JSON.parse(value);
-  } catch (err) {
-    throw new Error(`Invalid JSON in "${name}": ${(err as Error).message}`);
-  }
-}
+export const SERVER_NAME = 'invariance';
+export const SERVER_VERSION = '0.1.2';
 
 export function createMcpServer(): McpServer {
   const apiKey = process.env.INVARIANCE_API_KEY;
@@ -26,71 +29,60 @@ export function createMcpServer(): McpServer {
   });
 
   const server = new McpServer({
-    name: 'invariance',
-    version: '0.0.0',
+    name: SERVER_NAME,
+    version: SERVER_VERSION,
   });
 
-  // ── Create Run ──────────────────────────────────────────────────
+  registerRunTools(server, inv);
+  registerNodeTools(server, inv);
+  registerMonitorTools(server, inv);
+  registerSignalTools(server, inv);
+  registerFindingTools(server, inv);
+  registerReviewTools(server, inv);
+  registerAgentTools(server, inv);
+  registerInsightTools(server, inv);
+  registerLegacyAliases(server, inv);
 
+  return server;
+}
+
+// Legacy tool names kept so existing MCP client configs keep working.
+function registerLegacyAliases(server: McpServer, inv: Invariance): void {
   server.tool(
     'invariance_create_run',
-    'Start a new Invariance run',
-    { name: z.string().optional().describe('Run name') },
+    'Alias of invariance_run_start',
+    { name: z.string().optional() },
     async ({ name }) => {
       const run = await inv.runs.start({ name });
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({ id: run.runId, name: run.name, status: run.status }),
-        }],
-      };
+      return jsonResult({ id: run.runId, name: run.name, status: run.status });
     },
   );
-
-  // ── Get Run ─────────────────────────────────────────────────────
 
   server.tool(
     'invariance_get_run',
-    'Get details of an Invariance run',
-    { id: z.string().describe('Run ID') },
+    'Alias of invariance_run_get',
+    { id: z.string() },
     async ({ id }) => {
       const run = await inv.runs.get(id);
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({ id: run.runId, name: run.name, status: run.status }),
-        }],
-      };
+      return jsonResult({ id: run.runId, name: run.name, status: run.status });
     },
   );
-
-  // ── List Runs ───────────────────────────────────────────────────
 
   server.tool(
     'invariance_list_runs',
-    'List Invariance runs',
+    'Alias of invariance_run_list',
     {},
-    async () => {
-      const result = await inv.runs.list();
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify(result),
-        }],
-      };
-    },
+    async () => jsonResult(await inv.runs.list()),
   );
-
-  // ── Write Node ──────────────────────────────────────────────────
 
   server.tool(
     'invariance_write_node',
-    'Write a node to an Invariance run',
+    'Alias of invariance_node_write',
     {
-      run_id: z.string().describe('Run ID'),
-      action_type: z.string().describe('Action type (e.g. tool_call, llm_call)'),
-      input: z.string().optional().describe('Input JSON string'),
-      output: z.string().optional().describe('Output JSON string'),
+      run_id: z.string(),
+      action_type: z.string(),
+      input: z.string().optional(),
+      output: z.string().optional(),
     },
     async ({ run_id, action_type, input, output }) => {
       const nodes = await inv.nodes.write(run_id, [{
@@ -98,54 +90,29 @@ export function createMcpServer(): McpServer {
         input: parseJsonArg('input', input),
         output: parseJsonArg('output', output),
       }]);
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify(nodes[0]),
-        }],
-      };
+      return jsonResult(nodes[0]);
     },
   );
-
-  // ── List Nodes ──────────────────────────────────────────────────
 
   server.tool(
     'invariance_list_nodes',
-    'List nodes for an Invariance run',
-    { run_id: z.string().describe('Run ID') },
-    async ({ run_id }) => {
-      const result = await inv.nodes.list(run_id);
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify(result),
-        }],
-      };
-    },
+    'Alias of invariance_node_list',
+    { run_id: z.string() },
+    async ({ run_id }) => jsonResult(await inv.nodes.list(run_id)),
   );
-
-  // ── Verify Run ──────────────────────────────────────────────────
 
   server.tool(
     'invariance_verify_run',
-    'Verify the proof chain for an Invariance run',
-    { id: z.string().describe('Run ID') },
+    'Alias of invariance_run_verify',
+    { id: z.string() },
     async ({ id }) => {
       const run = await inv.runs.get(id);
-      const proof = await run.verify();
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify(proof),
-        }],
-      };
+      return jsonResult(await run.verify());
     },
   );
-
-  return server;
 }
 
-export async function main() {
+export async function main(): Promise<void> {
   const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
