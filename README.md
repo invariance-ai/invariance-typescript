@@ -57,7 +57,7 @@ The SDK is run-first:
 
 | Resource | Purpose |
 | --- | --- |
-| `inv.runs` | Start, list, inspect, verify runs. |
+| `inv.runs` | Start, list, get, verify runs. |
 | `inv.nodes` | Write nodes (trace events) and list them by run. |
 | `inv.monitors` | Create, update, and evaluate simple monitors. |
 | `inv.signals` | List and acknowledge monitor-emitted signals. |

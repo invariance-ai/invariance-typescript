@@ -539,11 +539,17 @@ export class RunClient implements RunHandle {
 
   private async flushLocked(): Promise<void> {
     while (this.buffer.length) {
-      const chunk = this.buffer.splice(0, BATCH_MAX);
-      const res = await this.http.post<{ data: Node[] }>('/v1/nodes', chunk);
-      const nodes = res.data;
-      if (nodes.length && !this.signingKey) {
-        this.lastHash = nodes[nodes.length - 1].hash;
+      const chunk = this.buffer.slice(0, BATCH_MAX);
+      try {
+        const res = await this.http.post<{ data: Node[] }>('/v1/nodes', chunk);
+        this.buffer.splice(0, chunk.length);
+        const nodes = res.data;
+        if (nodes.length && !this.signingKey) {
+          this.lastHash = nodes[nodes.length - 1].hash;
+        }
+      } catch (err) {
+        // Leave the chunk at the head of the buffer so callers can retry / observe loss.
+        throw err;
       }
     }
   }
@@ -730,7 +736,14 @@ export class RunsResource {
       await client.finish();
       return result;
     } catch (err) {
-      await client.fail(err instanceof Error ? err.message : String(err));
+      try {
+        await client.fail(err instanceof Error ? err.message : String(err));
+      } catch (failErr) {
+        // Preserve the original error as the cause; surface fail() failure as a warning.
+        if (err instanceof Error && failErr instanceof Error && !err.cause) {
+          (err as { cause?: unknown }).cause = failErr;
+        }
+      }
       throw err;
     }
   }
