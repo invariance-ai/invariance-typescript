@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -144,14 +145,17 @@ export function createMcpServer(): McpServer {
   return server;
 }
 
-// Entry point
-async function main() {
+export async function main() {
   const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
-main().catch((err) => {
+function isDirectRun(): boolean {
+  return process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+}
+
+if (isDirectRun()) main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
