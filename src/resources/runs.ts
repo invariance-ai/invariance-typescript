@@ -276,6 +276,7 @@ export class RunClient implements RunHandle {
     private readonly run: Run,
     private readonly signingKey: string | undefined,
     private readonly buffered: boolean,
+    private readonly tracing: boolean = true,
   ) {
     this.signals = new SignalsResource(http);
   }
@@ -434,6 +435,7 @@ export class RunClient implements RunHandle {
   // ── Low-level node emit (used by Step) ───────────────────────────
 
   async _emit(args: EmitArgs): Promise<void> {
+    if (!this.tracing) return;
     const run = this.writeChain.then(() => this.doEmit(args));
     this.writeChain = run.catch(() => undefined);
     await run;
@@ -698,7 +700,7 @@ export class RunsResource {
     private readonly defaultSigningKey?: string,
     features?: Features,
   ) {
-    this.features = features ?? { replay: false, costTracking: true };
+    this.features = features ?? { replay: false, costTracking: true, tracing: true };
   }
 
   /** Overload: callback form auto-finishes the run on completion (failing on throw). */
@@ -729,6 +731,7 @@ export class RunsResource {
       res.run,
       opts.signingKey ?? this.defaultSigningKey,
       opts.buffered ?? true,
+      this.features.tracing,
     );
     if (!fn) return client;
     try {
@@ -760,7 +763,7 @@ export class RunsResource {
       name: opts.name,
       metadata: opts.metadata,
     });
-    return new RunClient(this.http, res.run, this.defaultSigningKey, true);
+    return new RunClient(this.http, res.run, this.defaultSigningKey, true, this.features.tracing);
   }
 
   async list(opts: PageOptions = {}): Promise<ListResponse<Run>> {
@@ -769,6 +772,6 @@ export class RunsResource {
 
   async get(id: string): Promise<RunClient> {
     const res = await this.http.get<{ run: Run }>(`/v1/runs/${id}`);
-    return new RunClient(this.http, res.run, this.defaultSigningKey, true);
+    return new RunClient(this.http, res.run, this.defaultSigningKey, true, this.features.tracing);
   }
 }

@@ -10,6 +10,8 @@ import { FindingsResource } from './resources/findings.js';
 import { ReviewsResource } from './resources/reviews.js';
 import { NarrativesResource } from './resources/narratives.js';
 import { NodeTypesResource } from './resources/node-types.js';
+import { KbResource } from './resources/kb.js';
+import { AskResource } from './resources/ask.js';
 
 export { InvarianceApiError, RateLimitError } from './client.js';
 export type { RetryPolicy, HttpClientOptions } from './client.js';
@@ -94,6 +96,23 @@ export {
   type NarrativeScorer,
   type GetNarrativeOptions,
 } from './resources/narratives.js';
+export {
+  KbResource,
+  KbPagesResource,
+  KbSessionsResource,
+  type KbPage,
+  type KbPageKind,
+  type KbSession,
+  type KbMessage,
+  type AskRole,
+  type AskContentBlock,
+  type CreateKbPageInput,
+  type UpdateKbPageInput,
+  type ListKbPagesOptions,
+  type CreateKbSessionInput,
+  type AppendKbMessageInput,
+} from './resources/kb.js';
+export { AskResource, type AskRequest, type AskResponse } from './resources/ask.js';
 export { trace } from './resources/trace.js';
 export {
   generateKeypair,
@@ -119,6 +138,8 @@ export class Invariance {
   readonly features: import('./config.js').Features;
   readonly narratives: NarrativesResource;
   readonly nodeTypes: NodeTypesResource;
+  readonly kb: KbResource;
+  readonly ask: AskResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -136,6 +157,8 @@ export class Invariance {
     this.reviews = new ReviewsResource(http);
     this.narratives = new NarrativesResource(http);
     this.nodeTypes = new NodeTypesResource(http);
+    this.kb = new KbResource(http);
+    this.ask = new AskResource(http);
   }
 
   static init(
