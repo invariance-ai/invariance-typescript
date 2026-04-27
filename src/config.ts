@@ -5,6 +5,11 @@ export interface Features {
   replay: boolean;
   /** Toggles whether instrumented LLM helpers attach token/cost metadata. */
   costTracking: boolean;
+  /**
+   * Master switch for trace emission. Defaults true. Set INVARIANCE_TRACE=0
+   * to disable all observability without removing the SDK.
+   */
+  tracing: boolean;
 }
 
 export interface InvarianceConfig {
@@ -40,6 +45,7 @@ export function resolveConfig(config: InvarianceConfig = {}): ResolvedConfig {
   const features: Features = {
     replay: config.features?.replay ?? envBool('INVARIANCE_FEATURE_REPLAY', false),
     costTracking: config.features?.costTracking ?? envBool('INVARIANCE_COST_TRACKING', true),
+    tracing: config.features?.tracing ?? envBool('INVARIANCE_TRACE', true),
   };
   return {
     apiKey,
