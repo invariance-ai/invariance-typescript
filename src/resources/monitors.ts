@@ -247,6 +247,10 @@ export class MonitorsResource {
     return res.monitor;
   }
 
+  async delete(id: string): Promise<void> {
+    await this.http.delete<void>(`/v1/monitors/${id}`);
+  }
+
   pause(id: string): Promise<Monitor> {
     return this.update(id, { enabled: false });
   }
