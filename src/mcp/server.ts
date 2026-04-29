@@ -1,9 +1,12 @@
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { Invariance } from '../index.js';
 import { DEFAULT_API_URL } from '../config.js';
+
+const pkg = createRequire(import.meta.url)('../../package.json') as { version: string };
 
 function parseJsonArg(name: string, value: string | undefined): unknown {
   if (value === undefined) return undefined;
@@ -27,7 +30,7 @@ export function createMcpServer(): McpServer {
 
   const server = new McpServer({
     name: 'invariance',
-    version: '0.0.0',
+    version: pkg.version,
   });
 
   // ── Create Run ──────────────────────────────────────────────────
