@@ -119,6 +119,7 @@ describe('MonitorsResource resource surface', () => {
     };
     (http as unknown as { post: unknown }).post = (p: string, b?: unknown) => record('POST', p, b);
     (http as unknown as { get: unknown }).get = (p: string) => record('GET', p);
+    (http as unknown as { delete: unknown }).delete = (p: string) => record('DELETE', p);
     (http as unknown as { request: unknown }).request = (m: string, p: string, b?: unknown) => record(m, p, b);
     return { http, calls };
   }
@@ -148,5 +149,12 @@ describe('MonitorsResource resource surface', () => {
     await res.resume('mon_1');
     expect(calls[0].body).toEqual({ enabled: false });
     expect(calls[1].body).toEqual({ enabled: true });
+  });
+
+  it('delete sends DELETE', async () => {
+    const { http, calls } = stubHttp();
+    const res = new MonitorsResource(http);
+    await res.delete('mon_42');
+    expect(calls[0]).toMatchObject({ method: 'DELETE', path: '/v1/monitors/mon_42' });
   });
 });

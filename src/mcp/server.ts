@@ -124,6 +124,23 @@ export function createMcpServer(): McpServer {
     },
   );
 
+  // ── Delete Monitor ──────────────────────────────────────────────
+
+  server.tool(
+    'invariance_delete_monitor',
+    'Soft-delete (archive) a monitor. Existing findings, signals, and reviews remain queryable; the monitor stops evaluating.',
+    { id: z.string().describe('Monitor ID') },
+    async ({ id }) => {
+      await inv.monitors.delete(id);
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ id, deleted: true }),
+        }],
+      };
+    },
+  );
+
   // ── Verify Run ──────────────────────────────────────────────────
 
   server.tool(

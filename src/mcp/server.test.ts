@@ -114,6 +114,9 @@ beforeEach(async () => {
     if (method === 'GET' && url.pathname === '/v1/runs/missing') {
       return jsonResponse({ error: { code: 'not_found', message: 'Run missing not found' } }, 404);
     }
+    if (method === 'DELETE' && url.pathname === '/v1/monitors/mon_1') {
+      return new Response(null, { status: 204 });
+    }
 
     return jsonResponse({ error: { code: 'not_found', message: `${method} ${url.pathname}` } }, 404);
   });
@@ -138,6 +141,7 @@ describe('MCP server tools', () => {
 
     expect(result.tools.map((tool) => tool.name).sort()).toEqual([
       'invariance_create_run',
+      'invariance_delete_monitor',
       'invariance_get_run',
       'invariance_list_nodes',
       'invariance_list_runs',
@@ -213,6 +217,17 @@ describe('MCP server tools', () => {
     expect(result.isError).toBe(true);
     expect(contentText(result)).toContain('Invalid JSON in "input"');
     expect(requests.some((request) => request.path === '/v1/nodes')).toBe(false);
+  });
+
+  it('invariance_delete_monitor sends DELETE and reports the deletion', async () => {
+    const result = contentJson(await client.callTool({
+      name: 'invariance_delete_monitor',
+      arguments: { id: 'mon_1' },
+    }));
+    expect(result).toEqual({ id: 'mon_1', deleted: true });
+    expect(requests.find((r) => r.path === '/v1/monitors/mon_1')).toMatchObject({
+      method: 'DELETE',
+    });
   });
 
   it('returns API errors as MCP tool errors without leaking stack traces', async () => {
