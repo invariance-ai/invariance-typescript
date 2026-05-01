@@ -5,8 +5,7 @@
  * as the Python Invariance class. Drift here means the SDKs are no longer
  * a 1:1 mirror, which is a contract we want to keep.
  *
- * Run: pnpm tsx scripts/parity-check.ts
- *      (or: node --experimental-strip-types scripts/parity-check.ts on Node 24+)
+ * Run: pnpm parity
  *
  * Exits non-zero on drift so it can be wired into CI.
  */
@@ -47,7 +46,7 @@ function tsResources(): string[] {
   const inst = Invariance.init({ apiKey: 'inv_test_dummy', apiUrl: 'http://localhost:0' });
   return Object.keys(inst).filter((k) => {
     const v = (inst as unknown as Record<string, unknown>)[k];
-    return v !== null && typeof v === 'object' && k !== 'features';
+    return v !== null && typeof v === 'object' && k !== 'features' && k !== 'http';
   });
 }
 
