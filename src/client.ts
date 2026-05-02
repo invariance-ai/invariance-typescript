@@ -103,12 +103,25 @@ export class HttpClient {
     this.signal = options.signal;
   }
 
-  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    options: { idempotencyKey?: string } = {},
+  ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
     };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
+
+    // Auto-attach an Idempotency-Key on mutating requests so retries against
+    // POST/PATCH/PUT/DELETE de-duplicate on the server. The key is generated
+    // once per call (not per retry attempt) — same key reused across retries.
+    const isMutating = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+    if (isMutating) {
+      headers['Idempotency-Key'] = options.idempotencyKey ?? generateIdempotencyKey();
+    }
 
     let res!: Response;
     let lastStatus = 0;
@@ -152,15 +165,24 @@ export class HttpClient {
     return this.request<T>('GET', path);
   }
 
-  post<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('POST', path, body);
+  post<T>(path: string, body?: unknown, options?: { idempotencyKey?: string }): Promise<T> {
+    return this.request<T>('POST', path, body, options);
   }
 
-  patch<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('PATCH', path, body);
+  patch<T>(path: string, body?: unknown, options?: { idempotencyKey?: string }): Promise<T> {
+    return this.request<T>('PATCH', path, body, options);
   }
 
-  delete<T = void>(path: string): Promise<T> {
-    return this.request<T>('DELETE', path);
+  delete<T = void>(path: string, options?: { idempotencyKey?: string }): Promise<T> {
+    return this.request<T>('DELETE', path, undefined, options);
   }
+}
+
+function generateIdempotencyKey(): string {
+  // Prefer crypto.randomUUID where available; fall back to a hex random.
+  const g = globalThis as { crypto?: { randomUUID?: () => string } };
+  if (g.crypto?.randomUUID) return g.crypto.randomUUID();
+  let out = '';
+  for (let i = 0; i < 32; i++) out += Math.floor(Math.random() * 16).toString(16);
+  return out;
 }
