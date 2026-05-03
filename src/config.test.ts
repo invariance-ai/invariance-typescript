@@ -15,4 +15,9 @@ describe('resolveConfig', () => {
     const cfg = resolveConfig({ apiKey: 'inv_test_abc', apiUrl: 'http://localhost:3001' });
     expect(cfg.apiUrl).toBe('http://localhost:3001');
   });
+
+  it('removes trailing slashes from apiUrl', () => {
+    const cfg = resolveConfig({ apiKey: 'inv_test_abc', apiUrl: 'http://localhost:3001///' });
+    expect(cfg.apiUrl).toBe('http://localhost:3001');
+  });
 });
