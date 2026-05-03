@@ -1,7 +1,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { HttpClient } from '../client.js';
 import type { Features } from '../config.js';
-import { hashNodePayload, signEd25519, type NodeHashPayload } from '../crypto.js';
+import {
+  hashNodePayload,
+  hashRunCreatePayload,
+  signEd25519,
+  type NodeHashPayload,
+  type RunCreateHashPayload,
+} from '../crypto.js';
 import { buildHandoffToken, HandoffToken } from '../handoff-token.js';
 import { SignalsResource, type EmitSignalInput, type Signal } from './signals.js';
 import { pagePath, type PageOptions } from './query.js';
@@ -694,6 +700,8 @@ type WriteBody = Record<string, unknown>;
 
 export class RunsResource {
   private readonly features: Features;
+  /** Cached agent_id, fetched lazily on the first signed run-create. */
+  private cachedAgentId: string | null = null;
 
   constructor(
     private readonly http: HttpClient,
@@ -701,6 +709,14 @@ export class RunsResource {
     features?: Features,
   ) {
     this.features = features ?? { replay: false, costTracking: true, tracing: true };
+  }
+
+  /** Fetch and cache the calling agent's id. Used to bind run-create signatures. */
+  private async getAgentId(): Promise<string> {
+    if (this.cachedAgentId !== null) return this.cachedAgentId;
+    const me = await this.http.get<{ agent: { id: string } }>('/v1/agents/me');
+    this.cachedAgentId = me.agent.id;
+    return this.cachedAgentId;
   }
 
   /** Overload: callback form auto-finishes the run on completion (failing on throw). */
@@ -725,11 +741,33 @@ export class RunsResource {
     };
     if (opts.replaySeed !== undefined) body.replay_seed = opts.replaySeed;
     if (opts.parentHandoffToken !== undefined) body.parent_handoff_token = opts.parentHandoffToken;
+
+    // Run-level provenance: when a signing key is configured, sign the request
+    // body so the backend can prove the run was created by the private-key
+    // holder, not just the API-key bearer. Mirrors node signing — the same key
+    // signs both, producing one verifiable chain from run-create through every
+    // node in the run.
+    const signingKey = opts.signingKey ?? this.defaultSigningKey;
+    if (signingKey) {
+      const timestamp = Date.now();
+      const payload: RunCreateHashPayload = {
+        agent_id: await this.getAgentId(),
+        name: opts.name ?? '',
+        metadata: opts.metadata ?? {},
+        replay_seed: opts.replaySeed ?? null,
+        parent_handoff_token: opts.parentHandoffToken ?? null,
+        timestamp,
+      };
+      const hash = hashRunCreatePayload(payload);
+      body.timestamp = timestamp;
+      body.signature = signEd25519(hash, signingKey);
+    }
+
     const res = await this.http.post<{ run: Run }>('/v1/runs', body);
     const client = new RunClient(
       this.http,
       res.run,
-      opts.signingKey ?? this.defaultSigningKey,
+      signingKey,
       opts.buffered ?? true,
       this.features.tracing,
     );

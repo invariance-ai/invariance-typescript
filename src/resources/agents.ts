@@ -1,6 +1,12 @@
 import type { HttpClient } from '../client.js';
 import type { ListResponse } from './runs.js';
 import { withQuery } from './query.js';
+import {
+  getPublicKey,
+  hashKeyRotationPayload,
+  signEd25519,
+  type KeyRotationHashPayload,
+} from '../crypto.js';
 
 export interface Agent {
   id: string;
@@ -46,11 +52,44 @@ export class AgentsResource {
   }
 
   /**
-   * Register or rotate the caller's Ed25519 public key (32-byte hex, 64 chars).
+   * Register the caller's Ed25519 public key (bootstrap, 64-char hex). Prefer
+   * `rotateKey` when an agent already has a registered key — the backend
+   * rejects unsigned rotations.
    */
   async setPublicKey(publicKey: string): Promise<Agent> {
     const res = await this.http.request<{ agent: Agent }>('PUT', '/v1/agents/me/key', {
       public_key: publicKey,
+    });
+    return res.agent;
+  }
+
+  /**
+   * Rotate (or first-time register) the caller's Ed25519 public key with a
+   * signed payload proving control of the **new** private key. Required when
+   * the agent already has a registered key; recommended on bootstrap.
+   *
+   * @param newPrivateKey   The 64-char hex Ed25519 private key to install.
+   * @param prevPublicKey   The currently-registered public_key hex, or null on
+   *                        bootstrap. Backend cross-checks against the stored
+   *                        value and rejects mismatches.
+   */
+  async rotateKey(newPrivateKey: string, prevPublicKey: string | null = null): Promise<Agent> {
+    const newPublicKey = getPublicKey(newPrivateKey);
+    const me = await this.me();
+    const timestamp = Date.now();
+    const payload: KeyRotationHashPayload = {
+      agent_id: me.agent.id,
+      new_public_key: newPublicKey,
+      prev_public_key: prevPublicKey,
+      timestamp,
+    };
+    const hash = hashKeyRotationPayload(payload);
+    const signature = signEd25519(hash, newPrivateKey);
+    const res = await this.http.request<{ agent: Agent }>('PUT', '/v1/agents/me/key', {
+      public_key: newPublicKey,
+      prev_public_key: prevPublicKey,
+      timestamp,
+      signature,
     });
     return res.agent;
   }
