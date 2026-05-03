@@ -88,6 +88,16 @@ export class SignalsResource {
     return res.signal;
   }
 
+  /** Acknowledge up to 200 signals in one round-trip. */
+  async acknowledgeBulk(ids: string[]): Promise<Signal[]> {
+    if (ids.length === 0) return [];
+    const res = await this.http.patch<{ signals: Signal[] }>(
+      '/v1/signals/bulk/acknowledge',
+      { ids },
+    );
+    return res.signals;
+  }
+
   async resolve(id: string): Promise<Signal> {
     const res = await this.http.patch<{ signal: Signal }>(`/v1/signals/${id}/resolve`);
     return res.signal;
