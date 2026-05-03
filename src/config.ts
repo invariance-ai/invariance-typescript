@@ -49,7 +49,7 @@ export function resolveConfig(config: InvarianceConfig = {}): ResolvedConfig {
   };
   return {
     apiKey,
-    apiUrl: config.apiUrl ?? env?.INVARIANCE_API_URL ?? DEFAULT_API_URL,
+    apiUrl: (config.apiUrl ?? env?.INVARIANCE_API_URL ?? DEFAULT_API_URL).replace(/\/+$/, ''),
     signingKey: config.signingKey ?? env?.INVARIANCE_SIGNING_KEY ?? null,
     features,
   };
