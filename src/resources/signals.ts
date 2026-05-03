@@ -22,6 +22,17 @@ export interface Signal {
 }
 
 export interface EmitSignalInput {
+  /** Defaults to 'info' when omitted. */
+  severity?: Severity;
+  title: string;
+  message?: string;
+  type?: string;
+  data?: unknown;
+  node_id?: string;
+  run_id?: string;
+}
+
+interface EmitSignalBody {
   severity: Severity;
   title: string;
   message?: string;
@@ -32,9 +43,9 @@ export interface EmitSignalInput {
 }
 
 /** Strip undefined fields so the wire payload stays tidy. */
-export function buildSignalBody(input: EmitSignalInput): EmitSignalInput {
-  const body: EmitSignalInput = {
-    severity: input.severity,
+export function buildSignalBody(input: EmitSignalInput): EmitSignalBody {
+  const body: EmitSignalBody = {
+    severity: input.severity ?? 'info',
     title: input.title,
   };
   if (input.message !== undefined) body.message = input.message;
@@ -49,7 +60,17 @@ export class SignalsResource {
   constructor(private readonly http: HttpClient) {}
 
   async emit(input: EmitSignalInput): Promise<Signal> {
-    const res = await this.http.post<{ signal: Signal }>('/v1/signals', buildSignalBody(input));
+    // Auto-context: an agent running inside a recorded run can set
+    // INVARIANCE_RUN_ID / INVARIANCE_NODE_ID once and emit progress events
+    // without plumbing IDs through every call site.
+    const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+      ?.env;
+    const filled: EmitSignalInput = {
+      ...input,
+      run_id: input.run_id ?? env?.INVARIANCE_RUN_ID,
+      node_id: input.node_id ?? env?.INVARIANCE_NODE_ID,
+    };
+    const res = await this.http.post<{ signal: Signal }>('/v1/signals', buildSignalBody(filled));
     return res.signal;
   }
 
