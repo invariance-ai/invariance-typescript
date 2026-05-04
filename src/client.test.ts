@@ -94,6 +94,23 @@ describe('HttpClient retry', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('reuses one Idempotency-Key across mutating retries', async () => {
+    const calls = stubFetch([
+      () => new Response('{}', { status: 503 }),
+      () => new Response(JSON.stringify({ ok: 1 }), { status: 200 }),
+    ]);
+    const c = new HttpClient('http://x', 'k', {
+      retryPolicy: { maxRetries: 2, baseSeconds: 0, jitter: 0 },
+    });
+
+    await c.post<{ ok: number }>('/thing', { title: 'x' });
+
+    const first = (calls[0]?.init?.headers as Record<string, string>)['Idempotency-Key'];
+    const second = (calls[1]?.init?.headers as Record<string, string>)['Idempotency-Key'];
+    expect(first).toBeTruthy();
+    expect(second).toBe(first);
+  });
+
   it('passes the configured abort signal through fetch', async () => {
     const controller = new AbortController();
     const calls = stubFetch([() => new Response(JSON.stringify({ ok: true }), { status: 200 })]);
