@@ -1,5 +1,6 @@
 import type { HttpClient } from '../client.js';
 import type { Node, ListResponse } from './runs.js';
+import type { ArtifactRef } from './artifacts.js';
 import { pagePath, type PageOptions } from './query.js';
 
 export interface WriteNodeInput {
@@ -18,6 +19,8 @@ export interface WriteNodeInput {
   /** Pre-computed signature over the hash. If set, `id`, `timestamp`, and `previous_hashes` must also be set. */
   id?: string;
   signature?: string;
+  /** Binary artifacts (screenshots, DOM snapshots, HAR, video) linked to this node. */
+  attachments?: ArtifactRef[];
 }
 
 export class NodesResource {

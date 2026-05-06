@@ -45,6 +45,11 @@ export function sha256Hex(input: string): string {
   return bytesToHex(sha256(new TextEncoder().encode(input)));
 }
 
+/** SHA-256 over raw bytes (no UTF-8 re-encoding). Used by binary artifact uploads. */
+export function sha256BytesHex(input: Uint8Array): string {
+  return bytesToHex(sha256(input));
+}
+
 export interface NodeHashPayload {
   id: string;
   run_id: string;

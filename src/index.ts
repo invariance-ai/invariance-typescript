@@ -12,12 +12,29 @@ import { NarrativesResource } from './resources/narratives.js';
 import { NodeTypesResource } from './resources/node-types.js';
 import { KbResource } from './resources/kb.js';
 import { AskResource } from './resources/ask.js';
+import { ArtifactsResource } from './resources/artifacts.js';
 
 export { InvarianceApiError, RateLimitError } from './client.js';
 export type { RetryPolicy, HttpClientOptions } from './client.js';
 export { DEFAULT_API_URL, resolveConfig, type InvarianceConfig, type Features, type ResolvedConfig } from './config.js';
 export { withReproducibility, type ReproducibilityOptions } from './replay.js';
-export { instrumentOpenAI, instrumentAnthropic, priceCall, registerPricing, type PricingEntry } from './providers/index.js';
+export {
+  instrumentOpenAI,
+  instrumentAnthropic,
+  instrumentBrowserUse,
+  priceCall,
+  registerPricing,
+  type PricingEntry,
+  type BrowserUseLike,
+  type BrowserStepResult,
+  type InstrumentBrowserUseOptions,
+} from './providers/index.js';
+export {
+  ArtifactsResource,
+  type ArtifactKind,
+  type ArtifactRef,
+  type UploadArtifactInput,
+} from './resources/artifacts.js';
 export {
   RunClient,
   RunsResource,
@@ -140,6 +157,7 @@ export class Invariance {
   readonly nodeTypes: NodeTypesResource;
   readonly kb: KbResource;
   readonly ask: AskResource;
+  readonly artifacts: ArtifactsResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -159,6 +177,7 @@ export class Invariance {
     this.nodeTypes = new NodeTypesResource(http);
     this.kb = new KbResource(http);
     this.ask = new AskResource(http);
+    this.artifacts = new ArtifactsResource(http);
   }
 
   static init(
