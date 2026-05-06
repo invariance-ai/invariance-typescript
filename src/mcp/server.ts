@@ -144,6 +144,84 @@ export function createMcpServer(): McpServer {
     },
   );
 
+  // ── Evals: Run Case ─────────────────────────────────────────────
+
+  server.tool(
+    'invariance_eval_run_case',
+    'Run an eval case as an Invariance run. Stamps metadata.eval, evaluates monitors, returns pass/fail.',
+    {
+      suite: z.string().describe('Eval suite name (groups runs in the dashboard)'),
+      case: z.string().describe('Test case name within the suite'),
+      expected: z.string().optional().describe('Expected output / assertion descriptor as JSON string'),
+      inputs: z.string().optional().describe('Input snapshot as JSON string (for repeatability)'),
+      monitor_ids: z.array(z.string()).optional().describe('Monitor IDs to evaluate after the run'),
+      input_text: z.string().optional().describe('Plain text input recorded as the first node'),
+    },
+    async ({ suite, case: caseName, expected, inputs, monitor_ids, input_text }) => {
+      const result = await inv.evals.runCase({
+        suite,
+        case: caseName,
+        expected: parseJsonArg('expected', expected),
+        inputs: parseJsonArg('inputs', inputs),
+        monitorIds: monitor_ids,
+        handler: async (run) => {
+          if (input_text !== undefined) {
+            await run.log('eval_input', { text: input_text });
+          }
+        },
+      });
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            run_id: result.run_id,
+            suite: result.suite,
+            case: result.case,
+            status: result.status,
+            findings: result.findings.map((f) => ({
+              id: f.id,
+              severity: f.severity,
+              title: f.title,
+              status: f.status,
+            })),
+          }),
+        }],
+      };
+    },
+  );
+
+  // ── Evals: List Cases ───────────────────────────────────────────
+
+  server.tool(
+    'invariance_eval_list_cases',
+    'List eval-case runs for a suite with derived pass/fail status.',
+    {
+      suite: z.string().describe('Suite name'),
+      limit: z.number().int().positive().max(200).optional(),
+      cursor: z.string().optional(),
+    },
+    async ({ suite, limit, cursor }) => {
+      const res = await inv.evals.listCases({ suite, limit, cursor });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(res) }],
+      };
+    },
+  );
+
+  // ── Evals: Summarize ────────────────────────────────────────────
+
+  server.tool(
+    'invariance_eval_summarize',
+    'Aggregate pass/fail counts across all runs tagged with the given eval suite.',
+    { suite: z.string().describe('Suite name') },
+    async ({ suite }) => {
+      const res = await inv.evals.summarize(suite);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(res) }],
+      };
+    },
+  );
+
   // ── Verify Run ──────────────────────────────────────────────────
 
   server.tool(
