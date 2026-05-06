@@ -25,6 +25,7 @@ const TS_TO_PY: Record<string, string> = {
   nodeTypes: 'node_types',
   kb: 'kb',
   ask: 'ask',
+  evals: 'evals',
 };
 
 const PY_RESOURCES = [
@@ -40,6 +41,7 @@ const PY_RESOURCES = [
   'node_types',
   'kb',
   'ask',
+  'evals',
 ];
 
 function tsResources(): string[] {

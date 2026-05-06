@@ -117,6 +117,20 @@ beforeEach(async () => {
     if (method === 'DELETE' && url.pathname === '/v1/monitors/mon_1') {
       return new Response(null, { status: 204 });
     }
+    if (method === 'PATCH' && url.pathname.startsWith('/v1/runs/')) {
+      return jsonResponse({ run: { ...runFixture(), status: 'completed' } });
+    }
+    if (method === 'GET' && url.pathname === '/v1/findings') {
+      return jsonResponse({ data: [], next_cursor: null });
+    }
+    if (method === 'POST' && url.pathname === '/v1/monitors/mon_1/evaluate') {
+      return jsonResponse({
+        execution: { id: 'exec_1', status: 'passed' },
+        signals: [],
+        findings: [],
+        reviews: [],
+      });
+    }
 
     return jsonResponse({ error: { code: 'not_found', message: `${method} ${url.pathname}` } }, 404);
   });
@@ -142,12 +156,46 @@ describe('MCP server tools', () => {
     expect(result.tools.map((tool) => tool.name).sort()).toEqual([
       'invariance_create_run',
       'invariance_delete_monitor',
+      'invariance_eval_list_cases',
+      'invariance_eval_run_case',
+      'invariance_eval_summarize',
       'invariance_get_run',
       'invariance_list_nodes',
       'invariance_list_runs',
       'invariance_verify_run',
       'invariance_write_node',
     ]);
+  });
+
+  it('invariance_eval_run_case stamps metadata.eval and returns pass when no findings', async () => {
+    const result = contentJson(await client.callTool({
+      name: 'invariance_eval_run_case',
+      arguments: {
+        suite: 'regression-v1',
+        case: 'happy',
+        monitor_ids: ['mon_1'],
+        input_text: 'hello',
+      },
+    })) as { run_id: string; suite: string; case: string; status: string };
+
+    expect(result.suite).toBe('regression-v1');
+    expect(result.case).toBe('happy');
+    expect(result.status).toBe('pass');
+
+    const startReq = requests.find((r) => r.method === 'POST' && r.path === '/v1/runs');
+    expect(startReq).toBeDefined();
+    const startBody = startReq!.body as { metadata: { eval: { suite: string; case: string } } };
+    expect(startBody.metadata.eval.suite).toBe('regression-v1');
+    expect(startBody.metadata.eval.case).toBe('happy');
+    expect(requests.some((r) => r.path === '/v1/monitors/mon_1/evaluate')).toBe(true);
+  });
+
+  it('invariance_eval_summarize aggregates pass/fail counts', async () => {
+    const result = contentJson(await client.callTool({
+      name: 'invariance_eval_summarize',
+      arguments: { suite: 'empty-suite' },
+    }));
+    expect(result).toEqual({ suite: 'empty-suite', total: 0, passed: 0, failed: 0 });
   });
 
   it('executes run, node, and proof tools through the SDK HTTP contract', async () => {
