@@ -124,4 +124,26 @@ describe('HttpClient retry', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.init?.signal).toBe(controller.signal);
   });
+
+  it('normalizes trailing slashes in baseUrl', async () => {
+    const calls = stubFetch([
+      () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ]);
+    const c = new HttpClient('https://x.example.com/', 'k', {
+      retryPolicy: { maxRetries: 0, baseSeconds: 0, jitter: 0 },
+    });
+    await c.get('/v1/foo');
+    expect(calls[0]?.url).toBe('https://x.example.com/v1/foo');
+  });
+
+  it('normalizes multiple trailing slashes', async () => {
+    const calls = stubFetch([
+      () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ]);
+    const c = new HttpClient('https://x.example.com///', 'k', {
+      retryPolicy: { maxRetries: 0, baseSeconds: 0, jitter: 0 },
+    });
+    await c.get('/v1/foo');
+    expect(calls[0]?.url).toBe('https://x.example.com/v1/foo');
+  });
 });

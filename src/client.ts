@@ -93,12 +93,18 @@ export interface HttpClientOptions {
 export class HttpClient {
   private readonly retry: RetryPolicy;
   private readonly signal?: AbortSignal;
+  private readonly baseUrl: string;
 
   constructor(
-    private readonly baseUrl: string,
+    baseUrl: string,
     private readonly apiKey: string,
     options: HttpClientOptions = {},
   ) {
+    // Defense-in-depth: callers normally pass a value already normalized by
+    // resolveConfig(), but if HttpClient is constructed directly, strip
+    // trailing slashes here so `${this.baseUrl}/v1/foo` never becomes
+    // `https://x//v1/foo`.
+    this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.retry = { ...DEFAULT_RETRY_POLICY, ...options.retryPolicy };
     this.signal = options.signal;
   }
