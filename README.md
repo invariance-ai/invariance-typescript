@@ -50,6 +50,8 @@ Each `Invariance.init({ apiKey })` is bound to a single agent — the server rea
 A delegation between agents is recorded as a **handoff node**. The sender emits one with `run.handoff()`; the receiver opens its own run and links back via `parentHandoffToken`:
 
 ```ts
+import { Invariance } from '@invariance/sdk';
+
 // ── sender (agent: planner) ────────────────────────────────────────
 const planner = Invariance.init({
   apiKey: process.env.PLANNER_API_KEY!,
