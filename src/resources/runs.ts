@@ -111,6 +111,12 @@ export interface ContextOptions {
   metadata?: Record<string, unknown>;
   custom_fields?: Record<string, unknown>;
   type?: string;
+  /** Memory-read access events recorded during the run. */
+  memory_reads?: import('./memory.js').MemoryAccess[];
+  /** Memory-write access events recorded during the run. */
+  memory_writes?: import('./memory.js').MemoryAccess[];
+  /** Authoritative system records (CRM/ticket/policy snapshots) the run relied on. */
+  authoritative_records?: import('./memory.js').SystemRecord[];
 }
 
 export interface ToolOptions {
