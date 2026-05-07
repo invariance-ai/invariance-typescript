@@ -61,6 +61,65 @@ inv runs inspect <run_id> --json   # full run + nodes
 inv nodes tail <run_id>            # stream nodes as they arrive
 ```
 
+## Multi-agent
+
+Each `Invariance.init({ apiKey })` is bound to a single agent — the server reads `agent_id` from the API key on every node. To trace a multi-agent system, give each agent its own key (`inv.agents.create(...)` or the dashboard) and one `Invariance` instance per process/agent.
+
+A delegation between agents is recorded as a **handoff node**. The sender emits one with `run.handoff()`; the receiver opens its own run and links back via `parentHandoffToken`:
+
+```ts
+import { Invariance } from '@invariance/sdk';
+
+// ── sender (agent: planner) ────────────────────────────────────────
+const planner = Invariance.init({
+  apiKey: process.env.PLANNER_API_KEY!,
+  signingKey: process.env.PLANNER_SIGNING_KEY, // required to mint a token
+});
+
+let handoffToken: string | undefined;
+
+await planner.runs.start({ name: 'plan-and-execute' }, async (run) => {
+  await run.log('plan ready', { steps });
+
+  const token = await run.handoff({
+    toAgentId: 'executor',
+    reason: 'specialist required',
+    message: { steps },
+  });
+  handoffToken = token?.encode(); // null if signingKey is unset
+});
+
+// ── receiver (agent: executor) ─────────────────────────────────────
+const executor = Invariance.init({ apiKey: process.env.EXECUTOR_API_KEY! });
+
+await executor.runs.start(
+  { name: 'execute-plan', parentHandoffToken: handoffToken },
+  async (run) => {
+    await run.log('executing', { steps });
+    // …
+  },
+);
+```
+
+What the platform does with this:
+
+- The handoff node carries `handoff_from` / `handoff_to` / `handoff_reason`. The dashboard renders it as a boundary between swimlanes.
+- `parentHandoffToken` populates the receiver run's `parent_run_id`, so `/v1/runs/:id/metrics?include=descendants` rolls up the whole tree.
+- When both sides sign, the token is an Ed25519 attestation: the platform verifies the receiver was actually delegated to by that sender at that node hash. Unsigned runs still get the trace shape but no chain of custody.
+
+For inline delegations within a single run (no separate sub-run), pass the same metadata to any node helper:
+
+```ts
+await run.step('route', {
+  type: 'handoff',
+  handoffFrom: 'router',
+  handoffTo: 'refunds',
+  handoffReason: 'category=refund',
+}, async () => {});
+```
+
+See `invariance-platform/docs/observability.md` for the swimlane / `by_agent` metrics surface.
+
 ## Lifecycle
 
 The SDK is run-first:
