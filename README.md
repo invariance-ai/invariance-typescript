@@ -29,19 +29,37 @@ const inv = Invariance.init({
   apiKey: process.env.INVARIANCE_API_KEY!,
 });
 
-await inv.runs.start({ name: 'refund-flow' }, async (run) => {
-  await run.context({ userId, workspaceId, riskTier: 'medium' });
-  await run.log('prompt received', { prompt: rawPrompt });
+// Attach business identifiers at runs.start so traces are queryable
+// by customer / ticket / refund — whatever you operate on.
+await inv.runs.start(
+  {
+    name: 'refund-flow',
+    metadata: { customerId: 'c_123', ticketId: 't_456', refundId: 'rf_789' },
+  },
+  async (run) => {
+    await run.context({ userId, workspaceId, riskTier: 'medium' });
 
-  const policy = await run.tool('policy_lookup', { orderId }, async () => {
-    return lookupPolicy(orderId);
-  });
+    // Tool call: action_type is the tool name; output + duration + thrown
+    // errors are captured automatically and surfaced on the node.
+    const refund = await run.tool(
+      'stripe.refunds.create',
+      { orderId },
+      async () => stripeRefund(orderId),
+    );
 
-  await run.log('decision', { reason: 'customer eligible', policy });
-});
+    await run.log('decision', { status: 'completed', refundId: refund.id });
+  },
+);
 ```
 
-The callback form auto-finishes the run on success and marks it failed on throw. `run.step(...)` is the general primitive; `run.log`, `run.context`, and `run.tool` are thin helpers that emit nodes over it.
+The callback form auto-finishes the run on success and marks it failed on throw — the thrown error is recorded on the failing node and `run.error_count` increments. Use `run.fail(msg)` to mark a run failed without raising. `run.step(...)` is the general primitive; `run.log`, `run.context`, and `run.tool` are thin helpers that emit nodes over it.
+
+After the run, inspect it from any terminal — handy for coding agents debugging a failure:
+
+```bash
+inv runs inspect <run_id> --json   # full run + nodes
+inv nodes tail <run_id>            # stream nodes as they arrive
+```
 
 ## Lifecycle
 
