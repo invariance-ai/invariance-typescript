@@ -26,6 +26,7 @@ const TS_TO_PY: Record<string, string> = {
   kb: 'kb',
   ask: 'ask',
   evals: 'evals',
+  memory: 'memory',
 };
 
 const PY_RESOURCES = [
@@ -43,6 +44,10 @@ const PY_RESOURCES = [
   'ask',
   'evals',
 ];
+
+// Memory is intentionally shipping TS-first so CLI and MCP can consume the
+// types before Python parity lands.
+const INTENTIONAL_TS_ONLY_RESOURCES = new Set(['memory']);
 
 function tsResources(): string[] {
   const inst = Invariance.init({ apiKey: 'inv_test_dummy', apiUrl: 'http://localhost:0' });
@@ -63,8 +68,12 @@ function main(): void {
   );
 
   const missingFromTs = [...tsExpectedFromPy].filter((k) => !ts.has(k));
-  const missingFromPy = [...tsAsPy].filter((k) => !py.has(k));
-  const extraInTs = [...ts].filter((k) => !tsExpectedFromPy.has(k));
+  const missingFromPy = [...tsAsPy].filter(
+    (k) => !py.has(k) && !INTENTIONAL_TS_ONLY_RESOURCES.has(k),
+  );
+  const extraInTs = [...ts].filter(
+    (k) => !tsExpectedFromPy.has(k) && !INTENTIONAL_TS_ONLY_RESOURCES.has(TS_TO_PY[k] ?? k),
+  );
 
   let drift = false;
   if (missingFromTs.length > 0) {
@@ -74,6 +83,12 @@ function main(): void {
   if (missingFromPy.length > 0) {
     console.error('Resources present in TS SDK but missing from Python SDK:', missingFromPy);
     drift = true;
+  }
+  const intentionalTsOnly = [...tsAsPy].filter(
+    (k) => !py.has(k) && INTENTIONAL_TS_ONLY_RESOURCES.has(k),
+  );
+  if (intentionalTsOnly.length > 0) {
+    console.warn('Resources intentionally TS-only pending Python parity:', intentionalTsOnly);
   }
   if (extraInTs.length > 0 && !drift) {
     console.warn('TS SDK has unmapped resources (update TS_TO_PY):', extraInTs);

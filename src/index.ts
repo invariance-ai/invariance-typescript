@@ -13,6 +13,7 @@ import { NodeTypesResource } from './resources/node-types.js';
 import { KbResource } from './resources/kb.js';
 import { AskResource } from './resources/ask.js';
 import { EvalsResource } from './resources/evals.js';
+import { MemoryResource } from './resources/memory.js';
 
 export { InvarianceApiError, RateLimitError } from './client.js';
 export type { RetryPolicy, HttpClientOptions } from './client.js';
@@ -128,6 +129,29 @@ export {
 } from './resources/evals.js';
 export { trace } from './resources/trace.js';
 export {
+  MemoryResource,
+  buildMemoryReadBody,
+  buildMemoryWriteBody,
+  type MemoryRecord,
+  type MemoryAccess,
+  type MemoryDivergence,
+  type MemorySubjectType,
+  type MemorySource,
+  type MemoryAccessType,
+  type MemoryDivergenceKind,
+  type MemoryDivergenceStatus,
+  type MemoryReadInput,
+  type MemoryWriteInput,
+  type MemoryReadResponse,
+  type MemoryWriteResponse,
+  type EvidenceRef,
+  type SystemRecord,
+} from './resources/memory.js';
+export {
+  emptyOperationalContext,
+  type OperationalContext,
+} from './resources/operational-context.js';
+export {
   generateKeypair,
   getPublicKey,
   signEd25519,
@@ -154,6 +178,7 @@ export class Invariance {
   readonly kb: KbResource;
   readonly ask: AskResource;
   readonly evals: EvalsResource;
+  readonly memory: MemoryResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -174,6 +199,7 @@ export class Invariance {
     this.kb = new KbResource(http);
     this.ask = new AskResource(http);
     this.evals = new EvalsResource(http, this.runs);
+    this.memory = new MemoryResource(http);
   }
 
   static init(
