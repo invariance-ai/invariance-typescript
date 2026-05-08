@@ -23,7 +23,7 @@ A user with both surfaces installed (OSS Loop locally, main SDK / cloud connecte
 
 | OSS Loop tool | Main SDK MCP equivalent | Notes |
 |---|---|---|
-| `recent_sessions(repo, days, limit)` | `recent_runs(repo, days, limit)` | rename in main SDK to match OSS |
+| `recent_sessions(repo, days, limit)` | new compatibility tool backed by cloud run queries | closest existing SDK MCP tool is `invariance_list_runs`, but it has a different name and shape |
 | `my_patterns(repo, days)` | new — needs implementation against cloud queries | |
 | `pending_findings(repo)` | new — needs Findings query against cloud | |
 | `propose_rule(repo, title, summary, proposed_rule, pattern_signature, rule_file, evidence_run_ids)` | new | writes through to platform |
@@ -92,9 +92,9 @@ OSS Loop has no auth — local SQLite. Main SDK MCP server uses the user's API k
 ## Scope (estimated 1–1.5 days)
 
 1. **Audit current `src/mcp/server.ts`** against the OSS server — list tools that exist, are missing, or have different shapes.
-2. **Add the 5 missing tools** (`my_patterns`, `pending_findings`, `propose_rule`, `compare_sessions`, `trend`) wired to the platform's existing query endpoints.
-3. **Rename `recent_runs` → `recent_sessions`** if it exists; preserve the old name as an alias for one minor version.
-4. **Shape tests**: golden-file tests asserting that each tool's output JSON matches the OSS server's schema for an equivalent input. Tests live in `src/mcp/parity.test.ts` and import the OSS schemas as `@invariance/loop-mcp/schemas` (a tiny new export from the OSS package).
+2. **Add the 6 compatibility tools** (`recent_sessions`, `my_patterns`, `pending_findings`, `propose_rule`, `compare_sessions`, `trend`) wired to the platform's existing query endpoints.
+3. **Keep existing `invariance_*` tools intact**. The compatibility tools intentionally use the OSS names without the `invariance_` prefix so coding agents can call the same tool names on either server.
+4. **Shape tests**: golden-file tests asserting that each tool's output JSON matches the OSS server's schema for an equivalent input. Tests live in `src/mcp/parity.test.ts` and use frozen OSS response fixtures, or import OSS schemas if `@invariance/loop-mcp/schemas` becomes available.
 5. **Doc** in `README.md` referencing this doc and explaining the relationship.
 
 ## Non-goals
@@ -108,5 +108,5 @@ End-to-end test, once parity is in place:
 
 1. User has both: OSS Loop running locally, main SDK MCP server connected to cloud
 2. Agent calls `recent_sessions(repo='auth-service', days=7)` — both servers respond
-3. Agent calls `compare_sessions(a, b)` with one local + one cloud run id — main SDK returns null for the unknown id (graceful), OSS Loop does the same; agent decides which backend to retry against
+3. Agent calls `compare_sessions(a, b)` with one local + one cloud run id — both servers return the same graceful error object for the unknown id; agent decides which backend to retry against
 4. Schema compatibility test in CI runs against a frozen copy of the OSS schemas
