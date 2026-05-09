@@ -145,6 +145,8 @@ The SDK is run-first:
 | `inv.narratives` | LLM-generated run summaries. |
 | `inv.kb` | Knowledge base — `pages.{create,list,get,update,delete}`, `sessions.{create,list,get,delete,listMessages,appendMessage}`. |
 | `inv.ask` | Server-side agent loop with KB + run-context tools (`/v1/ask`). |
+| `inv.evals` | Run eval cases against your agent — `runCase`, `listCases`, `summarize`. |
+| `inv.memory` | Cross-run memory primitives — `read`, `write`. |
 
 ### Intelligence: KB + Ask
 
