@@ -2,7 +2,7 @@ import { HttpClient } from './client.js';
 import { resolveConfig, type InvarianceConfig } from './config.js';
 import { RunsResource } from './resources/runs.js';
 import { NodesResource } from './resources/nodes.js';
-import { AgentsResource } from './resources/agents.js';
+import { AgentsResource, OperatorsResource } from './resources/agents.js';
 import { MonitorsResource } from './resources/monitors.js';
 import { SignalsResource } from './resources/signals.js';
 import { ProofsResource } from './resources/proofs.js';
@@ -39,7 +39,9 @@ export { HandoffToken, buildHandoffToken, type HandoffTokenClaims } from './hand
 export { NodesResource, type WriteNodeInput } from './resources/nodes.js';
 export {
   AgentsResource,
+  OperatorsResource,
   type Agent,
+  type Operator,
   type ApiKeyPublic,
   type ApiKeyWithRaw,
   type MeResponse,
@@ -130,6 +132,7 @@ export class Invariance {
   readonly runs: RunsResource;
   readonly nodes: NodesResource;
   readonly agents: AgentsResource;
+  readonly operators: OperatorsResource;
   readonly monitors: MonitorsResource;
   readonly signals: SignalsResource;
   readonly proofs: ProofsResource;
@@ -150,6 +153,7 @@ export class Invariance {
     this.runs = new RunsResource(http, signingKey ?? undefined, features);
     this.nodes = new NodesResource(http);
     this.agents = new AgentsResource(http);
+    this.operators = new OperatorsResource(http);
     this.monitors = new MonitorsResource(http);
     this.signals = new SignalsResource(http);
     this.proofs = new ProofsResource(http);

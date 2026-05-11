@@ -11,9 +11,13 @@ import { pagePath, type PageOptions } from './query.js';
 export interface Run {
   id: string;
   agent_id: string;
+  operator_id?: string;
+  operator_type?: 'agent' | 'human';
   name: string;
   status: 'open' | 'completed' | 'failed';
   metadata: Record<string, unknown>;
+  session_type?: string | null;
+  session_source?: string | null;
   created_at: string;
   updated_at: string;
   closed_at: string | null;
@@ -73,6 +77,8 @@ export interface ListResponse<T> {
 export interface StartRunOptions {
   name?: string;
   metadata?: Record<string, unknown>;
+  sessionType?: string | null;
+  sessionSource?: string | null;
   /** Ed25519 private key (32-byte hex). If set, every node written through this run is signed. */
   signingKey?: string;
   /**
@@ -723,6 +729,8 @@ export class RunsResource {
       name: opts.name,
       metadata: opts.metadata,
     };
+    if (opts.sessionType !== undefined) body.session_type = opts.sessionType;
+    if (opts.sessionSource !== undefined) body.session_source = opts.sessionSource;
     if (opts.replaySeed !== undefined) body.replay_seed = opts.replaySeed;
     if (opts.parentHandoffToken !== undefined) body.parent_handoff_token = opts.parentHandoffToken;
     const res = await this.http.post<{ run: Run }>('/v1/runs', body);
