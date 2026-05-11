@@ -468,27 +468,50 @@ describe('EvalsResource nested namespaces', () => {
       },
     );
     const r = await inv.evals.experiments.run('er1', {
-      scorers: [{ name: 'exact_match' }, { name: 'numeric_tolerance', config: { tolerance: 0.1 } }],
+      scorer_specs: [
+        { name: 'exact_match' },
+        { name: 'numeric_tolerance', config: { tolerance: 0.1 } },
+      ],
     });
     expect(r.status).toBe('running');
     const call = calls.find((c) => c.path === '/v1/eval-runs/er1/experiment');
-    expect((call?.body as { scorers: unknown[] }).scorers).toHaveLength(2);
+    expect((call?.body as { scorer_specs: unknown[] }).scorer_specs).toHaveLength(2);
   });
 
-  it('experiments.compare encodes baseline query param', async () => {
+  it('experiments.compare unwraps { comparison } and encodes baseline', async () => {
     const { inv, calls, setResponse } = stubEvalsHttp();
     setResponse(
       (m, p) => m === 'GET' && p.startsWith('/v1/eval-runs/erB/compare'),
       {
-        baseline_run_id: 'erA',
-        current_run_id: 'erB',
-        aggregate: {},
-        cases: [],
+        comparison: {
+          run_id: 'erB',
+          baseline_run_id: 'erA',
+          aggregate: [{ scorer: 'exact_match', baseline: 0.5, current: 0.75, delta: 0.25 }],
+          cases: [],
+        },
       },
     );
     const cmp = await inv.evals.experiments.compare('erB', 'erA');
     expect(cmp.baseline_run_id).toBe('erA');
+    expect(cmp.run_id).toBe('erB');
+    expect(cmp.aggregate[0].delta).toBe(0.25);
     const c = calls.find((c) => c.path.startsWith('/v1/eval-runs/erB/compare'));
     expect(c?.path).toContain('baseline=erA');
+  });
+
+  it('scorers.listBuiltin hits /v1/scorers and unwraps { scorers }', async () => {
+    const { inv, calls, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'GET' && p === '/v1/scorers',
+      {
+        scorers: [
+          { name: 'exact_match', description: 'exact', config_schema: {} },
+          { name: 'numeric_tolerance', description: 'tol', config_schema: { tolerance: 'number' } },
+        ],
+      },
+    );
+    const out = await inv.evals.scorers.listBuiltin();
+    expect(out.map((s) => s.name)).toEqual(['exact_match', 'numeric_tolerance']);
+    expect(calls.some((c) => c.path === '/v1/scorers')).toBe(true);
   });
 });

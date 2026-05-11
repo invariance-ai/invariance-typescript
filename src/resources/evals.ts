@@ -131,6 +131,8 @@ export interface EvalRun {
   started_at: string | null;
   completed_at: string | null;
   metadata: Record<string, unknown>;
+  scorer_specs: ScorerSpec[] | null;
+  baseline_run_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -215,37 +217,48 @@ export interface StartEvalRunInput {
   metadata?: Record<string, unknown>;
 }
 
-// ── Experiment shapes (depend on backend task #1 — names TBD, finalized
-// when backend SendMessage announces them. Keep loose until confirmed.) ────
+// ── Experiment shapes (mirrors finalized @invariance/api-types from backend) ─
 
-/** Identifier for a built-in scorer plus optional config (e.g. `numeric_tolerance: { tolerance: 0.1 }`). */
+export type ScorerName =
+  | 'exact_match'
+  | 'contains'
+  | 'numeric_tolerance'
+  | 'json_match'
+  | 'levenshtein';
+
 export interface ScorerSpec {
-  name: string;
+  name: ScorerName;
   config?: Record<string, unknown>;
 }
 
 export interface ExperimentRunRequest {
-  scorers: ScorerSpec[];
+  scorer_specs: ScorerSpec[];
   baseline_run_id?: string | null;
-  metadata?: Record<string, unknown>;
 }
 
-export interface ExperimentRunResponse {
-  eval_run: EvalRun;
+export interface ScoreDelta {
+  scorer: ScorerName;
+  baseline: number | null;
+  current: number | null;
+  delta: number | null;
 }
 
-export interface ExperimentCompareCaseDelta {
+export interface CaseScoreDelta {
   case_id: string;
-  scores: Record<string, { baseline: number | null; current: number | null; delta: number | null }>;
-  status_baseline: EvalResultStatus | null;
-  status_current: EvalResultStatus | null;
+  scores: ScoreDelta[];
 }
 
 export interface CompareResponse {
+  run_id: string;
   baseline_run_id: string;
-  current_run_id: string;
-  aggregate: Record<string, { baseline: number | null; current: number | null; delta: number | null }>;
-  cases: ExperimentCompareCaseDelta[];
+  aggregate: ScoreDelta[];
+  cases: CaseScoreDelta[];
+}
+
+export interface BuiltinScorerInfo {
+  name: ScorerName;
+  description: string;
+  config_schema: Record<string, unknown>;
 }
 
 const SEVERITY_ORDER: Record<Severity, number> = {
@@ -505,6 +518,12 @@ export class EvalScorersNamespace {
     const res = await this.http.post<{ scorer: EvalScorer }>('/v1/eval-scorers', input);
     return res.scorer;
   }
+
+  /** List built-in scorers exposed by the platform — wraps GET /v1/scorers. */
+  async listBuiltin(): Promise<BuiltinScorerInfo[]> {
+    const res = await this.http.get<{ scorers: BuiltinScorerInfo[] }>('/v1/scorers');
+    return res.scorers;
+  }
 }
 
 export class EvalSuitesNamespace {
@@ -573,17 +592,11 @@ export class EvalRunsNamespace {
   }
 }
 
-/**
- * Experiment routes. Depend on backend task #1 (POST /v1/eval-runs/:id/experiment,
- * GET /v1/eval-runs/:id/compare). Request/response shapes are mirrored loosely
- * here and may be refined once the backend teammate finalizes ScorerSpec /
- * ExperimentRunRequest / CompareResponse in @invariance/api-types.
- */
 export class EvalExperimentsNamespace {
   constructor(private readonly http: HttpClient) {}
 
   async run(runId: string, input: ExperimentRunRequest): Promise<EvalRun> {
-    const res = await this.http.post<ExperimentRunResponse>(
+    const res = await this.http.post<{ eval_run: EvalRun }>(
       `/v1/eval-runs/${runId}/experiment`,
       input,
     );
@@ -591,8 +604,9 @@ export class EvalExperimentsNamespace {
   }
 
   async compare(runId: string, baselineRunId: string): Promise<CompareResponse> {
-    return this.http.get(
+    const res = await this.http.get<{ comparison: CompareResponse }>(
       withQuery(`/v1/eval-runs/${runId}/compare`, { baseline: baselineRunId }),
     );
+    return res.comparison;
   }
 }

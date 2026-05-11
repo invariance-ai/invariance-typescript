@@ -154,11 +154,13 @@ export {
   type CreateEvalCaseInput,
   type CreateEvalCaseFromRunInput,
   type StartEvalRunInput,
+  type ScorerName,
   type ScorerSpec,
   type ExperimentRunRequest,
-  type ExperimentRunResponse,
-  type ExperimentCompareCaseDelta,
+  type ScoreDelta,
+  type CaseScoreDelta,
   type CompareResponse,
+  type BuiltinScorerInfo,
 } from './resources/evals.js';
 export { trace } from './resources/trace.js';
 export {
