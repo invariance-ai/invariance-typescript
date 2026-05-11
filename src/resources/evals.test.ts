@@ -247,3 +247,271 @@ describe('EvalsResource.listCases', () => {
     expect(calls.some((c) => c.method === 'GET' && c.path.includes('eval_suite=s'))).toBe(true);
   });
 });
+
+describe('EvalsResource nested namespaces', () => {
+  function stubEvalsHttp(): {
+    inv: Invariance;
+    calls: Call[];
+    setResponse: (matcher: (m: string, p: string) => boolean, value: unknown) => void;
+  } {
+    const calls: Call[] = [];
+    const responses: Array<{ match: (m: string, p: string) => boolean; value: unknown }> = [];
+    const setResponse = (matcher: (m: string, p: string) => boolean, value: unknown): void => {
+      responses.unshift({ match: matcher, value });
+    };
+    const inv = Invariance.init({ apiKey: 'inv_test_abc', apiUrl: 'http://test.local' });
+    const handle = async (method: string, path: string, body?: unknown): Promise<unknown> => {
+      calls.push({ method, path, body });
+      for (const r of responses) {
+        if (r.match(method, path)) return r.value;
+      }
+      return {};
+    };
+    const evals = (inv as unknown as { evals: Record<string, unknown> }).evals;
+    for (const k of Object.keys(evals)) {
+      const v = (evals as Record<string, unknown>)[k];
+      if (v && typeof v === 'object' && 'http' in (v as object)) {
+        const h = (v as { http: HttpClient }).http;
+        h.get = ((p: string) => handle('GET', p)) as HttpClient['get'];
+        h.post = ((p: string, b?: unknown) => handle('POST', p, b)) as HttpClient['post'];
+      }
+    }
+    return { inv, calls, setResponse };
+  }
+
+  it('datasets.list hits /v1/eval-datasets with paging', async () => {
+    const { inv, calls, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'GET' && p.startsWith('/v1/eval-datasets'),
+      { data: [], next_cursor: null },
+    );
+    await inv.evals.datasets.list({ limit: 25 });
+    const c = calls.find((c) => c.method === 'GET' && c.path.startsWith('/v1/eval-datasets'));
+    expect(c?.path).toContain('limit=25');
+  });
+
+  it('datasets.create unwraps { dataset }', async () => {
+    const { inv, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'POST' && p === '/v1/eval-datasets',
+      {
+        dataset: {
+          id: 'd1',
+          agent_id: 'a',
+          name: 'd',
+          description: '',
+          metadata: {},
+          created_at: '',
+          updated_at: '',
+        },
+      },
+    );
+    const ds = await inv.evals.datasets.create({ name: 'd' });
+    expect(ds.id).toBe('d1');
+  });
+
+  it('datasets.appendRows posts examples and unwraps each', async () => {
+    const { inv, calls, setResponse } = stubEvalsHttp();
+    let i = 0;
+    setResponse(
+      (m, p) => m === 'POST' && p === '/v1/eval-datasets/d1/examples',
+      undefined as never,
+    );
+    const evals = (inv as unknown as { evals: Record<string, unknown> }).evals;
+    const dsResource = (evals as { datasets: { http: HttpClient } }).datasets;
+    dsResource.http.post = (async (p: string, b: unknown) => {
+      calls.push({ method: 'POST', path: p, body: b });
+      i++;
+      return {
+        example: {
+          id: `ex_${i}`,
+          dataset_id: 'd1',
+          agent_id: 'a',
+          input: {},
+          expected: {},
+          metadata: {},
+          created_at: '',
+          updated_at: '',
+        },
+      };
+    }) as HttpClient['post'];
+    const rows = await inv.evals.datasets.appendRows('d1', [
+      { input: { q: 1 } },
+      { input: { q: 2 } },
+    ]);
+    expect(rows.map((r) => r.id)).toEqual(['ex_1', 'ex_2']);
+    expect(calls.filter((c) => c.path === '/v1/eval-datasets/d1/examples')).toHaveLength(2);
+  });
+
+  it('scorers.list hits /v1/eval-scorers', async () => {
+    const { inv, calls, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'GET' && p.startsWith('/v1/eval-scorers'),
+      { data: [], next_cursor: null },
+    );
+    await inv.evals.scorers.list();
+    expect(calls.some((c) => c.method === 'GET' && c.path.startsWith('/v1/eval-scorers'))).toBe(
+      true,
+    );
+  });
+
+  it('suites.get unwraps { suite }', async () => {
+    const { inv, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'GET' && p === '/v1/eval-suites/s1',
+      {
+        suite: {
+          id: 's1',
+          agent_id: 'a',
+          dataset_id: null,
+          name: 's',
+          description: '',
+          target_type: 'custom',
+          scorer_ids: [],
+          metadata: {},
+          created_at: '',
+          updated_at: '',
+        },
+      },
+    );
+    const s = await inv.evals.suites.get('s1');
+    expect(s.id).toBe('s1');
+  });
+
+  it('cases.create posts to suite cases path', async () => {
+    const { inv, calls, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'POST' && p === '/v1/eval-suites/s1/cases',
+      {
+        case: {
+          id: 'c1',
+          suite_id: 's1',
+          agent_id: 'a',
+          dataset_example_id: null,
+          source_run_id: null,
+          source_finding_id: null,
+          source_graph_ref: null,
+          name: 'n',
+          input_bundle: {},
+          mutations: [],
+          expected: {},
+          assertions: [],
+          metadata: {},
+          created_at: '',
+          updated_at: '',
+        },
+      },
+    );
+    const c = await inv.evals.cases.create('s1', { name: 'n' });
+    expect(c.id).toBe('c1');
+    expect(calls.some((cc) => cc.path === '/v1/eval-suites/s1/cases' && cc.method === 'POST')).toBe(
+      true,
+    );
+  });
+
+  it('runs.start unwraps { eval_run }', async () => {
+    const { inv, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'POST' && p === '/v1/eval-suites/s1/run',
+      {
+        eval_run: {
+          id: 'er1',
+          suite_id: 's1',
+          agent_id: 'a',
+          target_type: 'custom',
+          target_ref: null,
+          status: 'queued',
+          summary: {},
+          started_at: null,
+          completed_at: null,
+          metadata: {},
+          created_at: '',
+          updated_at: '',
+        },
+      },
+    );
+    const r = await inv.evals.runs.start('s1');
+    expect(r.id).toBe('er1');
+    expect(r.status).toBe('queued');
+  });
+
+  it('runs.listResults hits results path', async () => {
+    const { inv, calls, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'GET' && p.startsWith('/v1/eval-runs/er1/results'),
+      { data: [], next_cursor: null },
+    );
+    await inv.evals.runs.listResults('er1', { limit: 10 });
+    const c = calls.find((c) => c.path.startsWith('/v1/eval-runs/er1/results'));
+    expect(c?.path).toContain('limit=10');
+  });
+
+  it('experiments.run posts scorers to /v1/eval-runs/:id/experiment', async () => {
+    const { inv, calls, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'POST' && p === '/v1/eval-runs/er1/experiment',
+      {
+        eval_run: {
+          id: 'er1',
+          suite_id: 's1',
+          agent_id: 'a',
+          target_type: 'custom',
+          target_ref: null,
+          status: 'running',
+          summary: {},
+          started_at: '',
+          completed_at: null,
+          metadata: {},
+          created_at: '',
+          updated_at: '',
+        },
+      },
+    );
+    const r = await inv.evals.experiments.run('er1', {
+      scorer_specs: [
+        { name: 'exact_match' },
+        { name: 'numeric_tolerance', config: { tolerance: 0.1 } },
+      ],
+    });
+    expect(r.status).toBe('running');
+    const call = calls.find((c) => c.path === '/v1/eval-runs/er1/experiment');
+    expect((call?.body as { scorer_specs: unknown[] }).scorer_specs).toHaveLength(2);
+  });
+
+  it('experiments.compare unwraps { comparison } and encodes baseline', async () => {
+    const { inv, calls, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'GET' && p.startsWith('/v1/eval-runs/erB/compare'),
+      {
+        comparison: {
+          run_id: 'erB',
+          baseline_run_id: 'erA',
+          aggregate: [{ scorer: 'exact_match', baseline: 0.5, current: 0.75, delta: 0.25 }],
+          cases: [],
+        },
+      },
+    );
+    const cmp = await inv.evals.experiments.compare('erB', 'erA');
+    expect(cmp.baseline_run_id).toBe('erA');
+    expect(cmp.run_id).toBe('erB');
+    expect(cmp.aggregate[0].delta).toBe(0.25);
+    const c = calls.find((c) => c.path.startsWith('/v1/eval-runs/erB/compare'));
+    expect(c?.path).toContain('baseline=erA');
+  });
+
+  it('scorers.listBuiltin hits /v1/scorers and unwraps { scorers }', async () => {
+    const { inv, calls, setResponse } = stubEvalsHttp();
+    setResponse(
+      (m, p) => m === 'GET' && p === '/v1/scorers',
+      {
+        scorers: [
+          { name: 'exact_match', description: 'exact', config_schema: {} },
+          { name: 'numeric_tolerance', description: 'tol', config_schema: { tolerance: 'number' } },
+        ],
+      },
+    );
+    const out = await inv.evals.scorers.listBuiltin();
+    expect(out.map((s) => s.name)).toEqual(['exact_match', 'numeric_tolerance']);
+    expect(calls.some((c) => c.path === '/v1/scorers')).toBe(true);
+  });
+});
