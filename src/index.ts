@@ -14,6 +14,8 @@ import { KbResource } from './resources/kb.js';
 import { AskResource } from './resources/ask.js';
 import { EvalsResource } from './resources/evals.js';
 import { MemoryResource } from './resources/memory.js';
+import { RecipesResource } from './resources/recipes.js';
+import { GuardrailsResource } from './resources/guardrails.js';
 
 export { InvarianceApiError, RateLimitError } from './client.js';
 export type { RetryPolicy, HttpClientOptions } from './client.js';
@@ -85,6 +87,29 @@ export {
 } from './resources/monitors.js';
 export { ProofsResource } from './resources/proofs.js';
 export { FindingsResource, type Finding, type FindingStatus } from './resources/findings.js';
+export {
+  RecipesResource,
+  type Recipe,
+  type GuardrailMode,
+  type UpdateRecipePatch,
+} from './resources/recipes.js';
+export {
+  GuardrailsResource,
+  type Guardrail,
+  type GuardrailStatus,
+  type CreateGuardrailInput,
+  type UpdateGuardrailPatch,
+  type GuardrailListOptions,
+} from './resources/guardrails.js';
+export type {
+  OperationalEntity,
+  OperationalEdge,
+  OperationalEdgeProvenance,
+  OperationalFinding,
+  OperationalFindingEvidence,
+  OperationalGraphCompleteness,
+  OperationalGraphResponse,
+} from './resources/runs.js';
 export {
   ReviewsResource,
   type Review,
@@ -214,6 +239,8 @@ export class Invariance {
   readonly ask: AskResource;
   readonly evals: EvalsResource;
   readonly memory: MemoryResource;
+  readonly recipes: RecipesResource;
+  readonly guardrails: GuardrailsResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -235,6 +262,8 @@ export class Invariance {
     this.ask = new AskResource(http);
     this.evals = new EvalsResource(http, this.runs);
     this.memory = new MemoryResource(http);
+    this.recipes = new RecipesResource(http);
+    this.guardrails = new GuardrailsResource(http);
   }
 
   static init(

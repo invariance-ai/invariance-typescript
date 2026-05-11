@@ -780,4 +780,88 @@ export class RunsResource {
     const res = await this.http.get<{ run: Run }>(`/v1/runs/${id}`);
     return new RunClient(this.http, res.run, this.defaultSigningKey, true, this.features.tracing);
   }
+
+  /**
+   * Fetch the operational graph for a run — entities, edges, findings, and a
+   * completeness score derived from the captured trace. See MVP spec §4.
+   */
+  async operationalGraph(runId: string): Promise<OperationalGraphResponse> {
+    return this.http.get<OperationalGraphResponse>(`/v1/runs/${runId}/operational-graph`);
+  }
+}
+
+// ── Operational graph types ────────────────────────────────────────────────
+
+export interface OperationalEntity {
+  id: string;
+  run_id?: string | null;
+  kind: string;
+  source: string;
+  external_id?: string | null;
+  title: string;
+  attributes: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface OperationalEdgeProvenance {
+  method: string;
+  source_artifacts: string[];
+  matching_features?: string[];
+  alternatives?: string[];
+  risk_impact?: 'none' | 'low' | 'medium' | 'high' | 'critical';
+}
+
+export interface OperationalEdge {
+  id: string;
+  run_id: string;
+  source_id: string;
+  target_id: string;
+  kind: string;
+  confidence: number;
+  evidence_node_ids: string[];
+  provenance: OperationalEdgeProvenance;
+  recipe_id?: string | null;
+  created_at: string;
+}
+
+export interface OperationalFindingEvidence {
+  label: string;
+  ref: string;
+  type: 'trace' | 'system' | 'doc' | 'history' | 'human';
+}
+
+export interface OperationalFinding {
+  id: string;
+  run_id: string;
+  severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+  title: string;
+  summary: string;
+  affected_entity_ids: string[];
+  evidence_node_ids: string[];
+  evidence: OperationalFindingEvidence[];
+  missing_control?: string | null;
+  recommended_guardrail?: {
+    title: string;
+    rule: string;
+    mode: 'suggested' | 'shadow' | 'active_monitor';
+  } | null;
+  status: 'open' | 'acknowledged' | 'resolved' | 'rejected';
+  created_at: string;
+}
+
+export interface OperationalGraphCompleteness {
+  business_object_linked: boolean;
+  policy_context_found: boolean;
+  owner_found: boolean;
+  approval_context_found: boolean;
+  downstream_state_change_found: boolean;
+  score: number;
+}
+
+export interface OperationalGraphResponse {
+  run_id: string;
+  entities: OperationalEntity[];
+  edges: OperationalEdge[];
+  findings: OperationalFinding[];
+  completeness: OperationalGraphCompleteness;
 }
