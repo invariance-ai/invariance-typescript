@@ -8,7 +8,7 @@ export type AgentSessionSource =
   | 'invariance_cli'
   | 'mcp'
   | 'claude_code'
-  | 'codex_cli'
+  | 'codex'
   | 'screen_recording'
   | 'microphone'
   | 'meeting'
