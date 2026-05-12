@@ -239,10 +239,14 @@ export {
   signEd25519,
   verifyEd25519,
   hashNodePayload,
+  hashRunCreatePayload,
+  hashKeyRotationPayload,
   stableStringify,
   sha256Hex,
   type Keypair,
   type NodeHashPayload,
+  type RunCreateHashPayload,
+  type KeyRotationHashPayload,
 } from './crypto.js';
 
 export class Invariance {

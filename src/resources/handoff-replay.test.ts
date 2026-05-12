@@ -41,6 +41,9 @@ describe('multi-agent handoff', () => {
 
   beforeEach(() => {
     getCalls = installFetch((method, path, body) => {
+      if (method === 'GET' && path === '/v1/agents/me') {
+        return jsonResponse({ agent: { id: 'planner', name: 'planner', public_key: null, project_id: 'p', created_at: '2024-01-01T00:00:00Z' } });
+      }
       if (method === 'POST' && path === '/v1/runs') {
         return jsonResponse({
           run: { id: 'run_1', agent_id: 'a_1', name: (body as { name?: string })?.name ?? '', status: 'open' },
@@ -114,6 +117,9 @@ describe('handoff attestation (crypto)', () => {
     const { privateKey, publicKey } = generateKeypair();
     let capturedSig: string | null = null;
     installFetch((method, path, body) => {
+      if (method === 'GET' && path === '/v1/agents/me') {
+        return jsonResponse({ agent: { id: 'planner', name: 'planner', public_key: null, project_id: 'p', created_at: '2024-01-01T00:00:00Z' } });
+      }
       if (method === 'POST' && path === '/v1/runs') {
         return jsonResponse({ run: { id: 'run_1', agent_id: 'planner', status: 'open' } });
       }
@@ -168,6 +174,9 @@ describe('handoff attestation (crypto)', () => {
 
   it('handoff() returns null when unsigned', async () => {
     installFetch((method, path) => {
+      if (method === 'GET' && path === '/v1/agents/me') {
+        return jsonResponse({ agent: { id: 'planner', name: 'planner', public_key: null, project_id: 'p', created_at: '2024-01-01T00:00:00Z' } });
+      }
       if (method === 'POST' && path === '/v1/runs') {
         return jsonResponse({ run: { id: 'run_1', agent_id: 'a', status: 'open' } });
       }
@@ -185,6 +194,9 @@ describe('handoff attestation (crypto)', () => {
   it('forwards parent_handoff_token to POST /v1/runs', async () => {
     let capturedBody: Record<string, unknown> | undefined;
     installFetch((method, path, body) => {
+      if (method === 'GET' && path === '/v1/agents/me') {
+        return jsonResponse({ agent: { id: 'planner', name: 'planner', public_key: null, project_id: 'p', created_at: '2024-01-01T00:00:00Z' } });
+      }
       if (method === 'POST' && path === '/v1/runs') {
         capturedBody = body as Record<string, unknown>;
         return jsonResponse({ run: { id: 'run_2', agent_id: 'a', status: 'open' } });

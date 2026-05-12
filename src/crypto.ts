@@ -68,6 +68,40 @@ export function hashNodePayload(payload: NodeHashPayload): string {
   return sha256Hex(stableStringify(payload));
 }
 
+/**
+ * Canonical payload for a signed `POST /v1/runs` request. Binds the run-create
+ * to the agent's signing key — proves origin even if the API key is leaked.
+ * MUST stay byte-identical to the backend's `RunCreateHashPayload`.
+ */
+export interface RunCreateHashPayload {
+  agent_id: string;
+  name: string;
+  metadata: Record<string, unknown>;
+  replay_seed: string | null;
+  parent_handoff_token: string | null;
+  timestamp: number;
+}
+
+export function hashRunCreatePayload(payload: RunCreateHashPayload): string {
+  return sha256Hex(stableStringify(payload));
+}
+
+/**
+ * Canonical payload for a signed `PUT /v1/agents/me/key` request. Signed by
+ * the **new** private key — proves the rotation is authorized by the holder
+ * of the new key, not just by whoever has the API key.
+ */
+export interface KeyRotationHashPayload {
+  agent_id: string;
+  new_public_key: string;
+  prev_public_key: string | null;
+  timestamp: number;
+}
+
+export function hashKeyRotationPayload(payload: KeyRotationHashPayload): string {
+  return sha256Hex(stableStringify(payload));
+}
+
 export interface Keypair {
   privateKey: string;
   publicKey: string;
