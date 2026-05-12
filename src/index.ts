@@ -16,6 +16,8 @@ import { EvalsResource } from './resources/evals.js';
 import { MemoryResource } from './resources/memory.js';
 import { RecipesResource } from './resources/recipes.js';
 import { GuardrailsResource } from './resources/guardrails.js';
+import { OperatorsResource } from './resources/operators.js';
+import { SessionsResource } from './resources/sessions.js';
 
 export { InvarianceApiError, RateLimitError } from './client.js';
 export type { RetryPolicy, HttpClientOptions } from './client.js';
@@ -44,12 +46,32 @@ export { NodesResource, type WriteNodeInput } from './resources/nodes.js';
 export {
   AgentsResource,
   type Agent,
+  type Operator,
+  type OperatorType,
   type ApiKeyPublic,
   type ApiKeyWithRaw,
   type MeResponse,
   type CreateAgentInput,
   type CreateAgentResponse,
 } from './resources/agents.js';
+export {
+  OperatorsResource,
+  type OperatorMeResponse,
+  type CreateOperatorInput,
+  type CreateOperatorResponse,
+  type ListOperatorsOptions,
+} from './resources/operators.js';
+export {
+  SessionsResource,
+  type AgentSession,
+  type AgentSessionSource,
+  type AgentSessionType,
+  type CreateAgentSessionRequest,
+  type CreateAgentSessionResponse,
+  type AgentSessionEventInput,
+  type AppendEventsResponse,
+  type ListSessionsOptions,
+} from './resources/sessions.js';
 export {
   defineNodeType,
   defineToolCallType,
@@ -227,6 +249,8 @@ export class Invariance {
   readonly runs: RunsResource;
   readonly nodes: NodesResource;
   readonly agents: AgentsResource;
+  readonly operators: OperatorsResource;
+  readonly sessions: SessionsResource;
   readonly monitors: MonitorsResource;
   readonly signals: SignalsResource;
   readonly proofs: ProofsResource;
@@ -251,6 +275,8 @@ export class Invariance {
     this.runs = new RunsResource(http, signingKey ?? undefined, features);
     this.nodes = new NodesResource(http);
     this.agents = new AgentsResource(http);
+    this.operators = new OperatorsResource(http);
+    this.sessions = new SessionsResource(http);
     this.monitors = new MonitorsResource(http);
     this.signals = new SignalsResource(http);
     this.proofs = new ProofsResource(http);

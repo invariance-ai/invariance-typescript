@@ -2,13 +2,23 @@ import type { HttpClient } from '../client.js';
 import type { ListResponse } from './runs.js';
 import { withQuery } from './query.js';
 
+export type OperatorType = 'agent' | 'human';
+
 export interface Agent {
   id: string;
   name: string;
   public_key: string | null;
   project_id: string;
   created_at: string;
+  /**
+   * Whether this operator is an automated agent or a human. Defaults to
+   * 'agent' on the platform when omitted from create payloads.
+   */
+  operator_type?: OperatorType;
 }
+
+/** Alias for {@link Agent} used when talking about the operator-brain surface. */
+export type Operator = Agent;
 
 export interface ApiKeyPublic {
   id: string;
