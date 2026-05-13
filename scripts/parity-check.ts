@@ -50,8 +50,10 @@ const PY_RESOURCES = [
 ];
 
 // Memory is intentionally shipping TS-first so CLI and MCP can consume the
-// types before Python parity lands.
-const INTENTIONAL_TS_ONLY_RESOURCES = new Set(['memory']);
+// types before Python parity lands. Operators + sessions follow the same
+// pattern — TS lands first so CLI/MCP/dashboard can wire the company-brain
+// surfaces, Python catches up in a follow-up.
+const INTENTIONAL_TS_ONLY_RESOURCES = new Set(['memory', 'operators', 'sessions']);
 
 function tsResources(): string[] {
   const inst = Invariance.init({ apiKey: 'inv_test_dummy', apiUrl: 'http://localhost:0' });
