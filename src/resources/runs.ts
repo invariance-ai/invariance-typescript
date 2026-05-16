@@ -59,6 +59,10 @@ export interface Node {
   handoff_from?: string | null;
   handoff_to?: string | null;
   handoff_reason?: string | null;
+  /** Case/workflow dimensions copied from the owning run. */
+  case_id?: string | null;
+  tenant_id?: string | null;
+  end_user_id?: string | null;
 }
 
 export type RunProofReason = 'linkage' | 'hash' | 'signature' | 'missing_key';
