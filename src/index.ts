@@ -18,6 +18,7 @@ import { RecipesResource } from './resources/recipes.js';
 import { GuardrailsResource } from './resources/guardrails.js';
 import { OperatorsResource } from './resources/operators.js';
 import { SessionsResource } from './resources/sessions.js';
+import { CasesResource } from './resources/cases.js';
 
 export { InvarianceApiError, RateLimitError } from './client.js';
 export type { RetryPolicy, HttpClientOptions } from './client.js';
@@ -123,6 +124,15 @@ export {
   type UpdateGuardrailPatch,
   type GuardrailListOptions,
 } from './resources/guardrails.js';
+export {
+  CasesResource,
+  type Case,
+  type CaseStatus,
+  type CaseWithRuns,
+  type CreateCaseOptions,
+  type UpdateCaseOptions,
+  type CloseCaseOptions,
+} from './resources/cases.js';
 export type {
   OperationalEntity,
   OperationalEdge,
@@ -265,6 +275,7 @@ export class Invariance {
   readonly memory: MemoryResource;
   readonly recipes: RecipesResource;
   readonly guardrails: GuardrailsResource;
+  readonly cases: CasesResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -290,6 +301,7 @@ export class Invariance {
     this.memory = new MemoryResource(http);
     this.recipes = new RecipesResource(http);
     this.guardrails = new GuardrailsResource(http);
+    this.cases = new CasesResource(http);
   }
 
   static init(
