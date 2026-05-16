@@ -5,6 +5,7 @@ import { hashNodePayload, signEd25519, type NodeHashPayload } from '../crypto.js
 import { buildHandoffToken, HandoffToken } from '../handoff-token.js';
 import { SignalsResource, type EmitSignalInput, type Signal } from './signals.js';
 import { pagePath, type PageOptions } from './query.js';
+import { activeCaseContext } from './cases.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,12 @@ export interface Run {
   tool_call_count?: number;
   error_count?: number;
   total_latency_ms?: number;
+  /** Case (workflow instance) this run belongs to. See `Case`. */
+  case_id?: string | null;
+  /** Platform-customer dimension propagated from the owning case. */
+  tenant_id?: string | null;
+  /** End-user dimension propagated from the owning case. */
+  end_user_id?: string | null;
 }
 
 export interface Node {
@@ -52,6 +59,10 @@ export interface Node {
   handoff_from?: string | null;
   handoff_to?: string | null;
   handoff_reason?: string | null;
+  /** Case/workflow dimensions copied from the owning run. */
+  case_id?: string | null;
+  tenant_id?: string | null;
+  end_user_id?: string | null;
 }
 
 export type RunProofReason = 'linkage' | 'hash' | 'signature' | 'missing_key';
@@ -85,6 +96,13 @@ export interface StartRunOptions {
   /** Encoded handoff attestation token from the sending agent's `run.handoff()`.
    *  Server verifies Ed25519 signature + binds this run to the signed handoff node. */
   parentHandoffToken?: string;
+  /** Case this run belongs to. If omitted but `inv.cases.with(...)` is active,
+   *  the surrounding case's id is auto-stamped. */
+  caseId?: string;
+  /** Override tenant_id for this run (normally inherited from the active case). */
+  tenantId?: string | null;
+  /** Override end_user_id for this run (normally inherited from the active case). */
+  endUserId?: string | null;
 }
 
 export interface StepOptions {
@@ -731,6 +749,16 @@ export class RunsResource {
     };
     if (opts.replaySeed !== undefined) body.replay_seed = opts.replaySeed;
     if (opts.parentHandoffToken !== undefined) body.parent_handoff_token = opts.parentHandoffToken;
+    // Auto-stamp case dimensions from the surrounding `inv.cases.with(...)`
+    // unless the caller passed explicit overrides. Explicit `caseId: undefined`
+    // on opts is treated as "no opinion" — the active context still applies.
+    const caseCtx = activeCaseContext();
+    const caseId = opts.caseId ?? caseCtx?.caseId;
+    if (caseId !== undefined) body.case_id = caseId;
+    if (opts.tenantId !== undefined) body.tenant_id = opts.tenantId;
+    else if (caseCtx?.tenantId != null) body.tenant_id = caseCtx.tenantId;
+    if (opts.endUserId !== undefined) body.end_user_id = opts.endUserId;
+    else if (caseCtx?.endUserId != null) body.end_user_id = caseCtx.endUserId;
     const res = await this.http.post<{ run: Run }>('/v1/runs', body);
     const client = new RunClient(
       this.http,

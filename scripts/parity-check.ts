@@ -29,6 +29,7 @@ const TS_TO_PY: Record<string, string> = {
   memory: 'memory',
   recipes: 'recipes',
   guardrails: 'guardrails',
+  cases: 'cases',
 };
 
 const PY_RESOURCES = [
@@ -47,6 +48,7 @@ const PY_RESOURCES = [
   'evals',
   'recipes',
   'guardrails',
+  'cases',
 ];
 
 // Memory is intentionally shipping TS-first so CLI and MCP can consume the
