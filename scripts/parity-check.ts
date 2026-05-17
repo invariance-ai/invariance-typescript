@@ -30,6 +30,8 @@ const TS_TO_PY: Record<string, string> = {
   recipes: 'recipes',
   guardrails: 'guardrails',
   cases: 'cases',
+  events: 'events',
+  workflowDefinitions: 'workflow_definitions',
 };
 
 const PY_RESOURCES = [
@@ -55,7 +57,13 @@ const PY_RESOURCES = [
 // types before Python parity lands. Operators + sessions follow the same
 // pattern — TS lands first so CLI/MCP/dashboard can wire the company-brain
 // surfaces, Python catches up in a follow-up.
-const INTENTIONAL_TS_ONLY_RESOURCES = new Set(['memory', 'operators', 'sessions']);
+const INTENTIONAL_TS_ONLY_RESOURCES = new Set([
+  'memory',
+  'operators',
+  'sessions',
+  'events',
+  'workflow_definitions',
+]);
 
 function tsResources(): string[] {
   const inst = Invariance.init({ apiKey: 'inv_test_dummy', apiUrl: 'http://localhost:0' });
