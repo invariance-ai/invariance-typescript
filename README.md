@@ -1,6 +1,6 @@
 # Invariance TypeScript SDK
 
-Official TypeScript SDK for the [Invariance AI](https://invariance.ai) platform. Start runs, emit nodes, verify proofs, and drive monitors/signals/reviews from any TypeScript or Node.js agent stack.
+Official TypeScript SDK for the [Invariance AI](https://invariance.ai) platform. Create cases for workflow instances, attach runs/nodes as evidence, and close outcomes from any TypeScript or Node.js agent stack.
 
 Part of the Invariance SDK family:
 
@@ -20,7 +20,7 @@ pnpm add @invariance/sdk
 
 Requires Node.js >= 20.
 
-## Quickstart
+## Quickstart: Trace A Workflow Instance
 
 ```ts
 import { Invariance } from '@invariance/sdk';
@@ -39,9 +39,92 @@ await inv.runs.start({ name: 'refund-flow' }, async (run) => {
 
   await run.log('decision', { reason: 'customer eligible', policy });
 });
+
+const c = await inv.cases.create({
+  workflowKey: 'support.escalation',
+  tenantId: 'acme',
+  endUserId: 'cus_123',
+});
+
+await inv.cases.with(c, async () => {
+  await inv.runs.start({ name: 'triage' }, async (run) => {
+    await run.tool('zendesk.ticket.read', { ticket_id: '123' });
+    await run.log('decision', { status: 'resolved' });
+  });
+});
+
+await inv.cases.close(c.id, { outcome: 'resolved', valueUsd: 250 });
 ```
 
-The callback form auto-finishes the run on success and marks it failed on throw. `run.step(...)` is the general primitive; `run.log`, `run.context`, and `run.tool` are thin helpers that emit nodes over it.
+Cases are workflow instances. Runs remain the execution evidence layer; `run.step(...)`, `run.log`, `run.context`, and `run.tool` emit nodes inside that evidence.
+
+Run the included smoke example from this repo:
+
+```bash
+INVARIANCE_API_KEY=inv_test_... pnpm tsx examples/instrument-run.ts
+```
+
+## Agent-Managed Runs
+
+Agents should create and close their own runs around each interview, task, or autonomous loop. Use the callback form when the agent is running in process, because it always finishes or fails the run:
+
+```ts
+await inv.runs.start({ name: 'candidate-interview' }, async (run) => {
+  await run.context({ candidateId, role: 'support-agent' });
+  await run.log('interview started');
+
+  const answer = await run.tool('ask_question', { question: 'How would you inspect a failed run?' }, async () => {
+    return interviewAgent.answer();
+  });
+
+  await run.log('interview answer', answer);
+  await run.verify();
+});
+```
+
+For agent frameworks that call tools, expose the MCP server below and let the agent call `invariance_create_run`, `invariance_write_node`, `invariance_finish_run` or `invariance_fail_run`, `invariance_create_monitor`, `invariance_evaluate_monitor`, and the review/signal tools itself.
+
+## MCP Server
+
+Install or build the SDK, then point any MCP host at the stdio server:
+
+```bash
+INVARIANCE_API_KEY=inv_test_... npx -y --package @invariance/sdk invariance-mcp
+```
+
+Local checkout:
+
+```bash
+pnpm build
+INVARIANCE_API_KEY=inv_test_... node dist/mcp/server.js
+```
+
+Example host config:
+
+```json
+{
+  "mcpServers": {
+    "invariance": {
+      "command": "invariance-mcp",
+      "env": {
+        "INVARIANCE_API_KEY": "inv_test_..."
+      }
+    }
+  }
+}
+```
+
+The server exposes tools for runs, nodes, proof verification, starter monitor creation/evaluation, signals, findings, reviews, and agent identity. It follows the MCP pattern of tools for model-invoked actions; resources/prompts can be added later for read-only documentation and reusable review workflows.
+
+## Starter Eval
+
+The fastest way to give new users something useful after setup is a tiny scenario eval: run a normal case and a risky case, attach a monitor, and produce a review for the risky run.
+
+```bash
+INVARIANCE_API_KEY=inv_test_... pnpm tsx examples/starter-eval.ts
+```
+
+That example is intentionally small. It teaches the product loop without introducing a separate eval framework: run -> nodes -> proof -> monitor -> signal/finding/review.
 
 ## Lifecycle
 

@@ -5,6 +5,7 @@ import { hashNodePayload, signEd25519, type NodeHashPayload } from '../crypto.js
 import { buildHandoffToken, HandoffToken } from '../handoff-token.js';
 import { SignalsResource, type EmitSignalInput, type Signal } from './signals.js';
 import { pagePath, type PageOptions } from './query.js';
+import { activeCaseContext } from './cases.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,9 @@ export interface Run {
   parent_run_id?: string | null;
   fork_point_node_id?: string | null;
   replay_seed?: string | null;
+  case_id?: string | null;
+  tenant_id?: string | null;
+  end_user_id?: string | null;
   total_input_tokens?: number;
   total_output_tokens?: number;
   total_cache_read?: number;
@@ -56,6 +60,9 @@ export interface Node {
   handoff_from?: string | null;
   handoff_to?: string | null;
   handoff_reason?: string | null;
+  case_id?: string | null;
+  tenant_id?: string | null;
+  end_user_id?: string | null;
 }
 
 export type RunProofReason = 'linkage' | 'hash' | 'signature' | 'missing_key';
@@ -91,6 +98,12 @@ export interface StartRunOptions {
   /** Encoded handoff attestation token from the sending agent's `run.handoff()`.
    *  Server verifies Ed25519 signature + binds this run to the signed handoff node. */
   parentHandoffToken?: string;
+  /** Case/workflow instance this run is evidence for. */
+  caseId?: string | null;
+  /** Tenant override. Usually inherited from case context. */
+  tenantId?: string | null;
+  /** End-user override. Usually inherited from case context. */
+  endUserId?: string | null;
 }
 
 export interface StepOptions {
@@ -733,6 +746,13 @@ export class RunsResource {
     if (opts.sessionSource !== undefined) body.session_source = opts.sessionSource;
     if (opts.replaySeed !== undefined) body.replay_seed = opts.replaySeed;
     if (opts.parentHandoffToken !== undefined) body.parent_handoff_token = opts.parentHandoffToken;
+    const caseCtx = activeCaseContext();
+    const caseId = opts.caseId ?? caseCtx?.caseId;
+    if (caseId !== undefined) body.case_id = caseId;
+    if (opts.tenantId !== undefined) body.tenant_id = opts.tenantId;
+    else if (caseCtx?.tenantId != null) body.tenant_id = caseCtx.tenantId;
+    if (opts.endUserId !== undefined) body.end_user_id = opts.endUserId;
+    else if (caseCtx?.endUserId != null) body.end_user_id = caseCtx.endUserId;
     const res = await this.http.post<{ run: Run }>('/v1/runs', body);
     const client = new RunClient(
       this.http,

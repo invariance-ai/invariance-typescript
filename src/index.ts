@@ -12,6 +12,7 @@ import { NarrativesResource } from './resources/narratives.js';
 import { NodeTypesResource } from './resources/node-types.js';
 import { KbResource } from './resources/kb.js';
 import { AskResource } from './resources/ask.js';
+import { CasesResource } from './resources/cases.js';
 
 export { InvarianceApiError, RateLimitError } from './client.js';
 export type { RetryPolicy, HttpClientOptions } from './client.js';
@@ -115,6 +116,22 @@ export {
   type AppendKbMessageInput,
 } from './resources/kb.js';
 export { AskResource, type AskRequest, type AskResponse } from './resources/ask.js';
+export {
+  CasesResource,
+  type Actor,
+  type ActorType,
+  type Case,
+  type CaseEvidence,
+  type CaseOutcome,
+  type CaseStatus,
+  type CaseWithRuns,
+  type CloseCaseOptions,
+  type CreateCaseOptions,
+  type CreateWorkflowEventOptions,
+  type EvidenceRef,
+  type UpdateCaseOptions,
+  type WorkflowEvent,
+} from './resources/cases.js';
 export { trace } from './resources/trace.js';
 export {
   generateKeypair,
@@ -143,6 +160,7 @@ export class Invariance {
   readonly nodeTypes: NodeTypesResource;
   readonly kb: KbResource;
   readonly ask: AskResource;
+  readonly cases: CasesResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -163,6 +181,7 @@ export class Invariance {
     this.nodeTypes = new NodeTypesResource(http);
     this.kb = new KbResource(http);
     this.ask = new AskResource(http);
+    this.cases = new CasesResource(http);
   }
 
   static init(
