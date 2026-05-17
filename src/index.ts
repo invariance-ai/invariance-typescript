@@ -19,6 +19,8 @@ import { GuardrailsResource } from './resources/guardrails.js';
 import { OperatorsResource } from './resources/operators.js';
 import { SessionsResource } from './resources/sessions.js';
 import { CasesResource } from './resources/cases.js';
+import { WorkflowEventsResource } from './resources/workflow-events.js';
+import { WorkflowDefinitionsResource } from './resources/workflow-definitions.js';
 
 export { InvarianceApiError, RateLimitError } from './client.js';
 export type { RetryPolicy, HttpClientOptions } from './client.js';
@@ -133,6 +135,27 @@ export {
   type UpdateCaseOptions,
   type CloseCaseOptions,
 } from './resources/cases.js';
+export {
+  WorkflowEventsResource,
+  type WorkflowEvent,
+  type WorkflowEventActorType,
+  type WorkflowEvidenceRef,
+  type EvidenceRefKind,
+  type CreateWorkflowEventOptions,
+  type WorkflowEventListOptions,
+} from './resources/workflow-events.js';
+export {
+  WorkflowDefinitionsResource,
+  type WorkflowDefinition,
+  type WorkflowDefinitionField,
+  type WorkflowDefinitionStep,
+  type WorkflowDefinitionOutcome,
+  type WorkflowFieldType,
+  type WorkflowOutcomeKind,
+  type WorkflowMetricWidget,
+  type CreateWorkflowDefinitionOptions,
+  type UpdateWorkflowDefinitionOptions,
+} from './resources/workflow-definitions.js';
 export type {
   OperationalEntity,
   OperationalEdge,
@@ -276,6 +299,8 @@ export class Invariance {
   readonly recipes: RecipesResource;
   readonly guardrails: GuardrailsResource;
   readonly cases: CasesResource;
+  readonly events: WorkflowEventsResource;
+  readonly workflowDefinitions: WorkflowDefinitionsResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -302,6 +327,8 @@ export class Invariance {
     this.recipes = new RecipesResource(http);
     this.guardrails = new GuardrailsResource(http);
     this.cases = new CasesResource(http);
+    this.events = new WorkflowEventsResource(http);
+    this.workflowDefinitions = new WorkflowDefinitionsResource(http);
   }
 
   static init(

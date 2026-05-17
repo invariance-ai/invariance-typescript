@@ -1,6 +1,11 @@
 import type { HttpClient } from '../client.js';
 import { pagePath, type PageOptions } from './query.js';
 import type { ListResponse, Run, RunClient } from './runs.js';
+import {
+  workflowEventBody,
+  type CreateWorkflowEventOptions,
+  type WorkflowEvent,
+} from './workflow-events.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -112,6 +117,23 @@ export class CasesResource {
   async get(id: string): Promise<CaseWithRuns> {
     const res = await this.http.get<{ case: CaseWithRuns }>(`/v1/cases/${id}`);
     return res.case;
+  }
+
+  async createEvent(caseId: string, opts: CreateWorkflowEventOptions): Promise<WorkflowEvent> {
+    const res = await this.http.post<{ event: WorkflowEvent }>(
+      `/v1/cases/${caseId}/events`,
+      workflowEventBody(opts),
+    );
+    return res.event;
+  }
+
+  async listEvents(
+    caseId: string,
+    opts: PageOptions = {},
+  ): Promise<ListResponse<WorkflowEvent>> {
+    return this.http.get<ListResponse<WorkflowEvent>>(
+      pagePath(`/v1/cases/${caseId}/events`, opts),
+    );
   }
 
   /** List cases. Filters mirror the server query params. */
