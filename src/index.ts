@@ -21,6 +21,7 @@ import { SessionsResource } from './resources/sessions.js';
 import { CasesResource } from './resources/cases.js';
 import { WorkflowEventsResource } from './resources/workflow-events.js';
 import { WorkflowDefinitionsResource } from './resources/workflow-definitions.js';
+import { CortexResource } from './resources/cortex.js';
 
 export { InvarianceApiError, RateLimitError } from './client.js';
 export type { RetryPolicy, HttpClientOptions } from './client.js';
@@ -196,6 +197,26 @@ export {
 } from './resources/kb.js';
 export { AskResource, type AskRequest, type AskResponse } from './resources/ask.js';
 export {
+  CortexResource,
+  CortexJobsResource,
+  type CortexJobKind,
+  type CortexTargetType,
+  type CortexJobStatus,
+  type CortexJobCriteria,
+  type CortexJobInputRefs,
+  type CortexJobOptions,
+  type CreateCortexJobInput,
+  type CreateCortexJobResponse,
+  type CortexJob,
+  type CortexJobResult,
+  type CortexJobResultPayload,
+  type WorkflowEvalResult,
+  type CounterfactualEvalResult,
+  type OutcomeAttributionResult,
+  type OutcomeAttributionFactor,
+  type CortexCriterionResult,
+} from './resources/cortex.js';
+export {
   EvalsResource,
   EvalDatasetsNamespace,
   EvalScorersNamespace,
@@ -301,6 +322,7 @@ export class Invariance {
   readonly cases: CasesResource;
   readonly events: WorkflowEventsResource;
   readonly workflowDefinitions: WorkflowDefinitionsResource;
+  readonly cortex: CortexResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -329,6 +351,7 @@ export class Invariance {
     this.cases = new CasesResource(http);
     this.events = new WorkflowEventsResource(http);
     this.workflowDefinitions = new WorkflowDefinitionsResource(http);
+    this.cortex = new CortexResource(http);
   }
 
   static init(
