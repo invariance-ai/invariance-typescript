@@ -32,6 +32,7 @@ const TS_TO_PY: Record<string, string> = {
   cases: 'cases',
   events: 'events',
   workflowDefinitions: 'workflow_definitions',
+  cortex: 'cortex',
 };
 
 const PY_RESOURCES = [
@@ -51,6 +52,7 @@ const PY_RESOURCES = [
   'recipes',
   'guardrails',
   'cases',
+  'cortex',
 ];
 
 // Memory is intentionally shipping TS-first so CLI and MCP can consume the
