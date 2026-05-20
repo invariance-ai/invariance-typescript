@@ -22,6 +22,7 @@ import { CasesResource } from './resources/cases.js';
 import { WorkflowEventsResource } from './resources/workflow-events.js';
 import { WorkflowDefinitionsResource } from './resources/workflow-definitions.js';
 import { CortexResource } from './resources/cortex.js';
+import { CapturesResource } from './resources/captures.js';
 
 export { InvarianceApiError, RateLimitError } from './client.js';
 export type { RetryPolicy, HttpClientOptions } from './client.js';
@@ -65,6 +66,12 @@ export {
   type CreateOperatorResponse,
   type ListOperatorsOptions,
 } from './resources/operators.js';
+export {
+  CapturesResource,
+  type Capture,
+  type ListCapturesOptions,
+  type UpdateCaptureOptions,
+} from './resources/captures.js';
 export {
   SessionsResource,
   type AgentSession,
@@ -323,6 +330,7 @@ export class Invariance {
   readonly events: WorkflowEventsResource;
   readonly workflowDefinitions: WorkflowDefinitionsResource;
   readonly cortex: CortexResource;
+  readonly captures: CapturesResource;
 
   private constructor(
     private readonly http: HttpClient,
@@ -352,6 +360,7 @@ export class Invariance {
     this.events = new WorkflowEventsResource(http);
     this.workflowDefinitions = new WorkflowDefinitionsResource(http);
     this.cortex = new CortexResource(http);
+    this.captures = new CapturesResource(http);
   }
 
   static init(
