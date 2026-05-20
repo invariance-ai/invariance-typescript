@@ -181,6 +181,16 @@ export class CasesResource {
   }
 
   /**
+   * Link a capture to a run that belongs to this case by setting the capture's
+   * run_id. Direct case→capture linkage is not yet supported by the backend;
+   * the association flows through runs (capture.run_id → run.case_id).
+   */
+  async linkCapture(caseId: string, captureId: string, runId: string): Promise<void> {
+    await this.http.patch(`/v1/captures/${captureId}`, { run_id: runId });
+    void caseId; // caseId documents intent; the run belongs to this case
+  }
+
+  /**
    * Run `fn` with a case context active. Any `inv.runs.start(...)` invoked
    * inside the callback (transitively) is auto-stamped with `case_id`,
    * `tenant_id`, and `end_user_id` from this case — no need to thread the id
